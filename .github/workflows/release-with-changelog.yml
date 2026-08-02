@@ -355,7 +355,7 @@ jobs:
 
       - name: Create GitHub Release
         if: steps.check_tag.outputs.exists == 'false'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ steps.get_version.outputs.version }}
           name: ${{ steps.get_version.outputs.is_prerelease == 'true' && format('Beta Release v{0}', steps.get_version.outputs.version) || format('Release v{0}', steps.get_version.outputs.version) }}
