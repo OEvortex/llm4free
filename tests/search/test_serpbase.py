@@ -6,7 +6,7 @@ import os
 
 import pytest
 
-from llm4free.search import SerpBase, TextResult, SEARCH_AUTH_REQUIRED, SEARCH_PROVIDERS
+from llm4free.search import SEARCH_AUTH_REQUIRED, SEARCH_PROVIDERS, SerpBase, TextResult
 
 
 class TestSerpBase:

@@ -1,7 +1,7 @@
 import json
 import time
 import uuid
-from typing import Any, Dict, Generator, List, Optional, Union
+from typing import Any, Dict, Generator, List, Optional, Union, cast
 
 from curl_cffi.requests import Session
 
@@ -384,7 +384,7 @@ class Surfsense(OpenAICompatibleProvider):
 
         self.session = Session()
         if proxies:
-            self.session.proxies.update(proxies)
+            self.session.proxies.update(cast(Any, proxies))
         self.session.headers.update(self.headers)
 
         self.chat = Chat(self)

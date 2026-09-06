@@ -383,7 +383,11 @@ class Completions(BaseCompletions):
         chunks: List[ChatCompletionChunk] = list(_drive())
         full_content = ""
         for chunk in chunks:
-            if chunk.choices and chunk.choices[0].delta.content:
+            if (
+                chunk.choices
+                and chunk.choices[0].delta is not None
+                and chunk.choices[0].delta.content
+            ):
                 full_content += chunk.choices[0].delta.content
 
         final = chunks[-1] if chunks else None

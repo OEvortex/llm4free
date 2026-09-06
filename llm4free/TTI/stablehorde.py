@@ -26,7 +26,6 @@ DEFAULT_HEADERS = {
 
 
 def _build_client_agent() -> str:
-    agent = LitAgent()
     # Format: client_name:version:contact_details
     return "llm4free:1.0:unknown"
 

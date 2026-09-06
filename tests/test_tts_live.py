@@ -6,17 +6,19 @@ Tests all TTS providers and reports which interfaces work and which don't.
 
 import os
 import sys
-import time
 import tempfile
+import time
 import traceback
-from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 from typing import Any
 
 # Ensure we can import from the project root
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from llm4free.TTS import (
+    TTSAI,
+    XLNKTTS,
     BaseTTSProvider,
     DeepgramTTS,
     ElevenlabsTTS,
@@ -29,11 +31,8 @@ from llm4free.TTS import (
     QwenTTS,
     SherpaTTS,
     StreamElements,
-    TTSAI,
     TTSOpenTTS,
-    XLNKTTS,
 )
-
 
 TEST_TEXT = "Hello, this is a test of the text to speech system."
 SHORT_TEXT = "Test successful."
