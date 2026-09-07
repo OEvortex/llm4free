@@ -10,6 +10,7 @@ All notable changes to this project will be documented in this file.
 - **Cloudflare** — Added a `None` guard on `delta.content` in the streaming response path to satisfy type checking.
 - **Surfsense** — Fixed `proxies` typing by casting to `Any` before updating the session proxies dict.
 - **StableHorde** — Removed unused `LitAgent()` assignment that triggered an unused-variable lint error.
+- **Bard** — Added CDP-backed authentication via `llm4free.requests.get_args_from_cdp` so `Chatbot.from_cdp()` and `AsyncChatbot.create_from_cdp()` can harvest `__Secure-1PSID` / `__Secure-1PSIDTS` from a real browser session instead of requiring a manual cookie file.
 
 ### 🚚 Moved
 - **Test imports** — Sorted import blocks in `tests/test_tts_live.py` and `tests/search/test_serpbase.py` to satisfy linting.
