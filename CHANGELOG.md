@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2026.9.7] - 2026-09-07
+
+### 🐛 Fixed
+- **Toolbaz** — Synced `AVAILABLE_MODELS` with the live Pro app dropdown (`app.toolbaz.com/tools/ai-writing-assistant`). Replaced stale lowercase/guessed identifiers with the actual selectable model names: `Gemini 3.7 Flash`, `Gemini 3.5 Flash`, `Gemini-3-Flash`, `Gemini 3.1 Pro`, `Gemini-2.5-Pro`, `Gemini-2.5-Flash`, `Claude-Sonnet-4`, `GPT-5`, `GPT-4o (latest)`, `GPT-OSS-120B`, `GPT-4o`, `Grok-4-Fast`, `ToolBaz-v4.5-Fast`, `ToolBaz-v4`, `ToolBaz-v3.5-Pro`, `ToolBaz-v3`, `Deepseek-V3.1`, `DeepSeek-V3`, `Deepseek-R1-Distill`, and `Llama-3.3 (70B)`.
+- **AI4Chat** — Removed 47 duplicate keys from the `MODELS` mapping that were silently overwriting earlier model name entries.
+- **Cloudflare** — Added a `None` guard on `delta.content` in the streaming response path to satisfy type checking.
+- **Surfsense** — Fixed `proxies` typing by casting to `Any` before updating the session proxies dict.
+- **StableHorde** — Removed unused `LitAgent()` assignment that triggered an unused-variable lint error.
+
+### 🚚 Moved
+- **Test imports** — Sorted import blocks in `tests/test_tts_live.py` and `tests/search/test_serpbase.py` to satisfy linting.
+
 ## [2026.07.16] - 2026-07-16
 
 ### ✨ Added
