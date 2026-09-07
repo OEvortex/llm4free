@@ -11,6 +11,9 @@ All notable changes to this project will be documented in this file.
 - **Surfsense** — Fixed `proxies` typing by casting to `Any` before updating the session proxies dict.
 - **StableHorde** — Removed unused `LitAgent()` assignment that triggered an unused-variable lint error.
 - **Bard** — Added CDP-backed authentication via `llm4free.requests.get_args_from_cdp` so `Chatbot.from_cdp()` and `AsyncChatbot.create_from_cdp()` can harvest `__Secure-1PSID` / `__Secure-1PSIDTS` from a real browser session instead of requiring a manual cookie file.
+- **Bard** — Fixed XSRF token extraction regex to match g4f's escaped-JSON pattern (`SNlM0e`), implemented the 97-element `_build_request()` structure with model selection at field 79, added WRB response parsing for both authenticated and anonymous formats, and implemented anonymous mode via `AsyncChatbot.create_anonymous()` / `Chatbot.from_anonymous()` so Gemini works without cookies.
+- **Gemini** — New OpenAI-compatible provider (`llm4free/llm/gemini.py`) for anonymous Gemini web access. Supports `gemini-3.6-flash`, `gemini-3.5-flash`, `gemini-3.5-flash-lite`, `gemini-3.1-pro`, `gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-2.0-flash`, `gemini-2.0-pro`, `gemini-1.5-flash`, and `gemini-1.5-pro`. Registered in `llm4free.llm`.
+- **Bard model catalog** — Expanded `MODELS`, `MODEL_ALIASES`, and the `Model` enum in `llm4free/Bard.py` with real reverse-engineered Gemini models and their mode values.
 
 ### 🚚 Moved
 - **Test imports** — Sorted import blocks in `tests/test_tts_live.py` and `tests/search/test_serpbase.py` to satisfy linting.

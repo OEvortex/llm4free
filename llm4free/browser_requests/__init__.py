@@ -27,7 +27,7 @@ async def get_args_from_cdp(
     url: str,
     proxy: Optional[str] = None,
     timeout: int = 120,
-    user_data_dir: str = "cdp",
+    user_data_dir: Optional[str] = None,
     headless: bool = True,
 ) -> Dict[str, Any]:
     """Open a browser, solve any interstitial, and return request kwargs.
@@ -40,7 +40,9 @@ async def get_args_from_cdp(
         url: The site URL to navigate to (and harvest cookies from).
         proxy: Optional proxy URL passed through to the request layer.
         timeout: Maximum seconds to wait for the interstitial to clear.
-        user_data_dir: Profile directory name for the shared browser.
+        user_data_dir: Optional Chrome profile directory name or path. When
+            omitted, the CDP session uses an isolated temporary browser state
+            rather than reusing any saved profile.
         headless: Whether to launch the browser headless.
 
     Returns:

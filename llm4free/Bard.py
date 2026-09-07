@@ -1,13 +1,17 @@
 import asyncio
+import hashlib
 import json
 import os
 import random
 import re
 import string
+import time
+import uuid
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, TypedDict, Union, cast
+from typing import Any, Dict, Iterator, List, Optional, Tuple, TypedDict, Union, cast
+from urllib.parse import quote_plus, unquote_plus
 
 from curl_cffi import CurlError
 from curl_cffi.requests import AsyncSession
@@ -18,6 +22,115 @@ from rich.console import Console
 from llm4free.browser_requests import get_args_from_cdp
 
 console = Console()
+
+# Patterns from g4f Gemini provider for parsing page metadata
+XSRF_PATTERN = re.compile(r'SNlM0e(?:\\?"|"):\\?"(.*?)(?:\\?"|")')
+BUILD_LABEL_PATTERN = re.compile(r"boq_assistant-bard-web-server_[A-Za-z0-9_.-]+")
+SID_PATTERN = re.compile(r'FdrFJe(?:\\?"|"):\\?"([\d-]+)(?:\\?"|")')
+PUSH_ID_PATTERN = re.compile(r'qKIAYe(?:\\?"|"):\\?"(.*?)(?:\\?"|")')
+
+# Model registry aligned with g4f's known Gemini models
+MODELS = {
+    "gemini-3.6-flash": {"mode": 1},
+    "gemini-3.5-flash": {"mode": 1},
+    "gemini-3.5-flash-lite": {"mode": 6},
+    "gemini-3.1-pro": {"mode": 3},
+    "gemini-2.5-flash": {"mode": 1},
+    "gemini-2.5-pro": {"mode": 3},
+    "gemini-2.0-flash": {"mode": 1},
+    "gemini-2.0-pro": {"mode": 3},
+    "gemini-1.5-flash": {"mode": 1},
+    "gemini-1.5-pro": {"mode": 3},
+}
+
+MODEL_ALIASES = {
+    "gemini-2.0": "gemini-3.6-flash",
+    "gemini-2.0-flash": "gemini-3.6-flash",
+    "gemini-2.0-flash-thinking": "gemini-3.6-flash",
+    "gemini-2.0-flash-thinking-with-apps": "gemini-3.6-flash",
+    "gemini-2.5-flash": "gemini-3.6-flash",
+    "gemini-2.5-pro": "gemini-3.1-pro",
+    "gemini-3.1-flash-lite": "gemini-3.5-flash-lite",
+    "gemini-3.5-flash": "gemini-3.6-flash",
+    "gemini-3.5-flash-thinking": "gemini-3.6-flash",
+    "gemini-3.6-flash-thinking": "gemini-3.6-flash",
+    "gemini-auto": "gemini-3.6-flash",
+    "gemini-3.5-flash-thinking-lite": "gemini-3.5-flash-lite",
+    "gemini-3.5-flash-lite-thinking": "gemini-3.5-flash-lite",
+    "gemini-flash-lite": "gemini-3.5-flash-lite",
+    **{key: key for key in MODELS.keys()},
+}
+
+
+def _make_sapisid_hash(cookies: Dict[str, str]) -> Optional[str]:
+    """Create SAPISIDHASH authorization header from cookies."""
+    sapisid = cookies.get("SAPISID") or cookies.get("__Secure-1PAPISID")
+    if not sapisid:
+        return None
+    timestamp = int(time.time())
+    digest = hashlib.sha1(
+        f"{timestamp} {sapisid} https://gemini.google.com".encode()
+    ).hexdigest()
+    return f"SAPISIDHASH {timestamp}_{digest}"
+
+
+def _iter_wrb_payloads(value: Any) -> Iterator[str]:
+    """Iterate over WRB payloads in a nested response structure."""
+    if not isinstance(value, list):
+        return
+    for item in value:
+        if not isinstance(item, list) or not item:
+            continue
+        first = item[0]
+        if isinstance(first, str) and first.startswith("wrb.fr"):
+            # Authenticated format: "wrb.fr,[...]" or "wrb.fr,[...]"
+            payload = first[len("wrb.fr"):]
+            if payload.startswith(","):
+                payload = payload[1:]
+            if payload:
+                yield payload
+                return
+            # Anonymous format: ["wrb.fr", null, "[...]"]
+            if len(item) > 2 and isinstance(item[2], str):
+                yield item[2]
+                return
+        yield from _iter_wrb_payloads(item)
+
+
+def _extract_response_content(response_part: list) -> Optional[str]:
+    """Extract text content from a response part."""
+    try:
+        parts = response_part[4]
+    except (IndexError, TypeError):
+        return None
+    if not isinstance(parts, list):
+        return None
+    snapshots = []
+    for part in parts:
+        if not isinstance(part, list) or len(part) <= 1:
+            continue
+        values = part[1]
+        if isinstance(values, str):
+            snapshots.append(values)
+        elif isinstance(values, list):
+            snapshots.extend(value for value in values if isinstance(value, str))
+    return snapshots[-1] if snapshots else None
+
+
+def _extract_response_part(value: Any) -> Optional[list]:
+    """Extract the best response part from WRB payloads."""
+    response_parts = []
+    for payload in _iter_wrb_payloads(value):
+        try:
+            response_part = json.loads(payload)
+        except (TypeError, ValueError):
+            continue
+        if isinstance(response_part, list):
+            response_parts.append(response_part)
+    for response_part in reversed(response_parts):
+        if _extract_response_content(response_part) is not None:
+            return response_part
+    return response_parts[-1] if response_parts else None
 
 
 class AskResponse(TypedDict):
@@ -77,44 +190,33 @@ class Model(Enum):
 
     Attributes:
         model_name (str): Name of the model.
-        model_header (dict): Additional headers required for the model.
+        mode (int): Model mode value used in request[79].
         advanced_only (bool): Whether the model is available only for advanced users.
     """
 
-    UNSPECIFIED = ("unspecified", {}, False)
-    GEMINI_3_0_PRO = (
-        "gemini-3.0-pro",
-        {
-            "x-goog-ext-525001261-jspb": '[1,null,null,null,"e6fa609c3fa255c0",null,null,0,[4],null,null,2]'
-        },
-        False,
-    )
-    GEMINI_3_0_FLASH = (
-        "gemini-3.0-flash",
-        {
-            "x-goog-ext-525001261-jspb": '[1,null,null,null,"56fdd199312815e2",null,null,0,[4],null,null,2]'
-        },
-        False,
-    )
-    GEMINI_3_0_FLASH_THINKING = (
-        "gemini-3.0-flash-thinking",
-        {
-            "x-goog-ext-525001261-jspb": '[1,null,null,null,"e051ce1aa80aa576",null,null,0,[4],null,null,2]'
-        },
-        False,
-    )
+    UNSPECIFIED = ("unspecified", 0, False)
+    GEMINI_3_6_FLASH = ("gemini-3.6-flash", 1, False)
+    GEMINI_3_5_FLASH = ("gemini-3.5-flash", 1, False)
+    GEMINI_3_5_FLASH_LITE = ("gemini-3.5-flash-lite", 6, False)
+    GEMINI_3_1_PRO = ("gemini-3.1-pro", 3, False)
+    GEMINI_2_5_FLASH = ("gemini-2.5-flash", 1, False)
+    GEMINI_2_5_PRO = ("gemini-2.5-pro", 3, False)
+    GEMINI_2_0_FLASH = ("gemini-2.0-flash", 1, False)
+    GEMINI_2_0_PRO = ("gemini-2.0-pro", 3, False)
+    GEMINI_1_5_FLASH = ("gemini-1.5-flash", 1, False)
+    GEMINI_1_5_PRO = ("gemini-1.5-pro", 3, False)
 
-    def __init__(self, name: str, header: Dict[str, str], advanced_only: bool):
+    def __init__(self, name: str, mode: int, advanced_only: bool):
         """
         Initialize a Model enum member.
 
         Args:
             name (str): Model name.
-            header (dict): Model-specific headers.
+            mode (int): Model mode value for request field 79.
             advanced_only (bool): If True, model is for advanced users only.
         """
         self.model_name = name
-        self.model_header = header
+        self.mode = mode
         self.advanced_only = advanced_only
 
     @classmethod
@@ -137,6 +239,14 @@ class Model(Enum):
         raise ValueError(
             f"Unknown model name: {name}. Available models: {', '.join([model.model_name for model in cls])}"
         )
+
+    @classmethod
+    def resolve(cls, name: str) -> "Model":
+        """Resolve a model name to a Model enum, falling back to UNSPECIFIED."""
+        try:
+            return cls.from_name(name)
+        except ValueError:
+            return cls.UNSPECIFIED
 
 
 async def upload_file(
@@ -232,11 +342,11 @@ def load_cookies(cookie_path: str) -> Tuple[str, str]:
         raise Exception(f"An unexpected error occurred while loading cookies: {e}")
 
 
-def _extract_bard_cookies(cookies: List[Dict[str, Any]]) -> Tuple[str, str]:
+def _extract_bard_cookies(cookies: Dict[str, str]) -> Tuple[str, str]:
     """Extract ``__Secure-1PSID`` and ``__Secure-1PSIDTS`` from CDP cookies.
 
     Args:
-        cookies: Cookie list returned by :func:`llm4free.browser_requests.get_args_from_cdp`.
+        cookies: Cookie dict returned by :func:`llm4free.browser_requests.get_args_from_cdp`.
 
     Returns:
         Tuple of ``(__Secure-1PSID, __Secure-1PSIDTS)`` values.
@@ -244,18 +354,12 @@ def _extract_bard_cookies(cookies: List[Dict[str, Any]]) -> Tuple[str, str]:
     Raises:
         ValueError: If either required cookie is missing.
     """
-    secure_1psid = None
-    secure_1psidts = None
-    for cookie in cookies:
-        name = cookie.get("name", "")
-        if name.upper() == "__SECURE-1PSID":
-            secure_1psid = cookie.get("value")
-        elif name.upper() == "__SECURE-1PSIDTS":
-            secure_1psidts = cookie.get("value")
-
+    secure_1psid = cookies.get("__Secure-1PSID")
+    secure_1psidts = cookies.get("__Secure-1PSIDTS")
     if not secure_1psid or not secure_1psidts:
         raise ValueError(
-            "Required cookies (__Secure-1PSID or __Secure-1PSIDTS) not found in CDP cookies."
+            "Required cookies (__Secure-1PSID or __Secure-1PSIDTS) not found in CDP cookies. "
+            "If using a Chrome profile, make sure you're already logged into gemini.google.com."
         )
     return secure_1psid, secure_1psidts
 
@@ -319,6 +423,7 @@ class Chatbot:
         model: Model = Model.UNSPECIFIED,
         impersonate: str = "chrome110",
         cdp_timeout: int = 120,
+        profile_name: Optional[str] = None,
     ) -> "Chatbot":
         """Create a :class:`Chatbot` using CDP-harvested Gemini cookies.
 
@@ -332,6 +437,10 @@ class Chatbot:
             model: Default model enum member.
             impersonate: Browser profile for ``curl_cffi`` requests.
             cdp_timeout: Max seconds to wait for the Gemini page to load.
+            profile_name: Optional Chrome profile name or path to reuse login state.
+                On this system, available profiles include ``"Profile 1"``
+                and ``"Profile 2"``. When omitted, an isolated temporary
+                browser state is used and Google login cookies may be missing.
 
         Returns:
             A ready-to-use :class:`Chatbot` instance.
@@ -347,6 +456,7 @@ class Chatbot:
                 url="https://gemini.google.com",
                 proxy=proxy if isinstance(proxy, str) else None,
                 timeout=cdp_timeout,
+                user_data_dir=profile_name,
             )
         )
         secure_1psid, secure_1psidts = _extract_bard_cookies(cdp_args["cookies"])
@@ -358,6 +468,75 @@ class Chatbot:
         instance.async_chatbot = loop.run_until_complete(
             AsyncChatbot.create(
                 secure_1psid, secure_1psidts, proxy, timeout, model, impersonate
+            )
+        )
+        return instance
+
+    @classmethod
+    def from_cookies(
+        cls,
+        secure_1psid: str,
+        secure_1psidts: str,
+        proxy: Optional[Union[str, Dict[str, str]]] = None,
+        timeout: int = 20,
+        model: Model = Model.UNSPECIFIED,
+        impersonate: str = "chrome110",
+    ) -> "Chatbot":
+        """Create a :class:`Chatbot` directly from Gemini auth cookies.
+
+        This is the fastest path when you already have valid
+        ``__Secure-1PSID`` and ``__Secure-1PSIDTS`` values.
+
+        Returns:
+            A ready-to-use :class:`Chatbot` instance.
+        """
+        instance = cls.__new__(cls)
+        try:
+            loop: asyncio.AbstractEventLoop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        instance.loop = loop
+        instance.secure_1psid = secure_1psid
+        instance.secure_1psidts = secure_1psidts
+        instance.async_chatbot = loop.run_until_complete(
+            AsyncChatbot.create(
+                secure_1psid, secure_1psidts, proxy, timeout, model, impersonate
+            )
+        )
+        return instance
+
+    @classmethod
+    def from_anonymous(
+        cls,
+        proxy: Optional[Union[str, Dict[str, str]]] = None,
+        timeout: int = 20,
+        model: Model = Model.UNSPECIFIED,
+        impersonate: str = "chrome110",
+    ) -> "Chatbot":
+        """Create a :class:`Chatbot` for anonymous usage without Google login.
+
+        This mode uses Gemini's unauthenticated API. No cookies are required,
+        but responses may be limited compared to authenticated mode.
+
+        Returns:
+            A ready-to-use :class:`Chatbot` instance.
+        """
+        instance = cls.__new__(cls)
+        try:
+            loop: asyncio.AbstractEventLoop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        instance.loop = loop
+        instance.secure_1psid = ""
+        instance.secure_1psidts = ""
+        instance.async_chatbot = loop.run_until_complete(
+            AsyncChatbot.create_anonymous(
+                proxy=proxy,
+                timeout=timeout,
+                model=model,
+                impersonate=impersonate,
             )
         )
         return instance
@@ -402,6 +581,10 @@ class AsyncChatbot:
         "timeout",
         "model",
         "impersonate",
+        "_bl",
+        "_sid",
+        "_upload_push_id",
+        "anonymous",
     ]
 
     def __init__(
@@ -412,13 +595,13 @@ class AsyncChatbot:
         timeout: int = 20,
         model: Model = Model.UNSPECIFIED,
         impersonate: str = "chrome110",
+        anonymous: bool = False,
     ):
         headers = Headers.GEMINI.value.copy()
-        if model != Model.UNSPECIFIED:
-            headers.update(model.model_header)
         self._reqid = int("".join(random.choices(string.digits, k=7)))
         self.proxy = proxy
         self.impersonate = impersonate
+        self.anonymous = anonymous
 
         self.proxies_dict = None
         if isinstance(proxy, str):
@@ -432,9 +615,18 @@ class AsyncChatbot:
         self.secure_1psid = secure_1psid
         self.secure_1psidts = secure_1psidts
 
+        # Metadata extracted from Gemini page init
+        self._bl = "boq_assistant-bard-web-server_20240625.13_p0"
+        self._sid = None
+        self._upload_push_id = "feeds/mcudyrk2a4khkz"
+        self.SNlM0e = None
+
+        # For anonymous mode, don't set auth cookies
+        cookies = {} if anonymous else {"__Secure-1PSID": secure_1psid, "__Secure-1PSIDTS": secure_1psidts}
+
         self.session: AsyncSession = AsyncSession(
             headers=headers,
-            cookies={"__Secure-1PSID": secure_1psid, "__Secure-1PSIDTS": secure_1psidts},
+            cookies=cookies,
             proxies=cast(Any, self.proxies_dict if self.proxies_dict else None),
             timeout=timeout,
             impersonate=cast(Any, self.impersonate if self.impersonate else None),
@@ -442,7 +634,6 @@ class AsyncChatbot:
 
         self.timeout = timeout
         self.model = model
-        self.SNlM0e = None
 
     @classmethod
     async def create(
@@ -453,22 +644,53 @@ class AsyncChatbot:
         timeout: int = 20,
         model: Model = Model.UNSPECIFIED,
         impersonate: str = "chrome110",
+        anonymous: bool = False,
     ) -> "AsyncChatbot":
         """
         Factory method to create and initialize an AsyncChatbot instance.
-        Fetches the necessary SNlM0e value asynchronously.
+        Fetches the necessary SNlM0e value asynchronously unless in anonymous mode.
+
+        Args:
+            anonymous: If True, skip authentication and work without cookies.
         """
-        instance = cls(secure_1psid, secure_1psidts, proxy, timeout, model, impersonate)
-        try:
-            instance.SNlM0e = await instance.__get_snlm0e()
-        except Exception as e:
-            console.log(
-                f"[red]Error during AsyncChatbot initialization (__get_snlm0e): {e}[/red]",
-                style="bold red",
-            )
-            await instance.session.close()
-            raise
+        instance = cls(secure_1psid, secure_1psidts, proxy, timeout, model, impersonate, anonymous)
+        if not anonymous:
+            try:
+                instance.SNlM0e = await instance.__get_snlm0e()
+            except Exception as e:
+                console.log(
+                    f"[red]Error during AsyncChatbot initialization (__get_snlm0e): {e}[/red]",
+                    style="bold red",
+                )
+                await instance.session.close()
+                raise
         return instance
+
+    @classmethod
+    async def create_anonymous(
+        cls,
+        proxy: Optional[Union[str, Dict[str, str]]] = None,
+        timeout: int = 20,
+        model: Model = Model.UNSPECIFIED,
+        impersonate: str = "chrome110",
+    ) -> "AsyncChatbot":
+        """Create an :class:`AsyncChatbot` for anonymous usage without cookies.
+
+        This mode uses Gemini's unauthenticated API endpoint. No Google login
+        is required, but responses may be limited compared to authenticated mode.
+
+        Returns:
+            A ready-to-use :class:`AsyncChatbot` instance.
+        """
+        return await cls.create(
+            secure_1psid="",
+            secure_1psidts="",
+            proxy=proxy,
+            timeout=timeout,
+            model=model,
+            impersonate=impersonate,
+            anonymous=True,
+        )
 
     @classmethod
     async def create_from_cdp(
@@ -478,6 +700,7 @@ class AsyncChatbot:
         model: Model = Model.UNSPECIFIED,
         impersonate: str = "chrome110",
         cdp_timeout: int = 120,
+        profile_name: Optional[str] = None,
     ) -> "AsyncChatbot":
         """Create an :class:`AsyncChatbot` using CDP-harvested Gemini cookies.
 
@@ -491,6 +714,10 @@ class AsyncChatbot:
             model: Default model enum member.
             impersonate: Browser profile for ``curl_cffi`` requests.
             cdp_timeout: Max seconds to wait for the Gemini page to load.
+            profile_name: Optional Chrome profile name or path to reuse login state.
+                On this system, available profiles include ``"Profile 1 (Vortex)"``
+                and ``"Profile 2 (XETRO)"``. When omitted, an isolated temporary
+                browser state is used and Google login cookies may be missing.
 
         Returns:
             A ready-to-use :class:`AsyncChatbot` instance.
@@ -499,6 +726,7 @@ class AsyncChatbot:
             url="https://gemini.google.com",
             proxy=proxy if isinstance(proxy, str) else None,
             timeout=cdp_timeout,
+            user_data_dir=profile_name,
         )
         secure_1psid, secure_1psidts = _extract_bard_cookies(cdp_args["cookies"])
         return await cls.create(
@@ -571,7 +799,6 @@ class AsyncChatbot:
                     if "model_name" in conversation:
                         try:
                             self.model = Model.from_name(conversation["model_name"])
-                            self.session.headers.update(self.model.model_header)
                         except ValueError as e:
                             console.log(
                                 f"[yellow]Warning: Model '{conversation['model_name']}' from saved conversation not found. Using current model '{self.model.model_name}'. Error: {e}[/yellow]"
@@ -601,7 +828,8 @@ class AsyncChatbot:
                     "Authentication failed. Cookies might be invalid or expired. Please update them."
                 )
 
-            snlm0e_match = re.search(r'["\']SNlM0e["\']\s*:\s*["\'](.*?)["\']', resp.text)
+            # Extract XSRF token using g4f's pattern for escaped JSON
+            snlm0e_match = XSRF_PATTERN.search(resp.text)
             if not snlm0e_match:
                 error_message = "SNlM0e value not found in response."
                 if resp.status_code == 429:
@@ -612,13 +840,31 @@ class AsyncChatbot:
                     )
                 raise ValueError(error_message)
 
+            self.SNlM0e = snlm0e_match.group(1)
+
+            # Extract build label
+            build_match = BUILD_LABEL_PATTERN.search(resp.text)
+            if build_match:
+                self._bl = build_match.group(0)
+
+            # Extract upload push ID
+            push_id_match = PUSH_ID_PATTERN.search(resp.text)
+            if push_id_match:
+                self._upload_push_id = push_id_match.group(1)
+
+            # Extract SID
+            sid_match = SID_PATTERN.search(resp.text)
+            if sid_match:
+                self._sid = sid_match.group(1)
+
+            # Rotate cookies if PSIDTS is missing
             if not self.secure_1psidts and "PSIDTS" not in self.session.cookies:
                 try:
                     await self.__rotate_cookies()
                 except Exception as e:
                     console.log(f"[yellow]Warning: Could not refresh PSIDTS cookie: {e}[/yellow]")
 
-            return snlm0e_match.group(1)
+            return self.SNlM0e
 
         except Timeout as e:
             raise TimeoutError(f"Request timed out while fetching SNlM0e: {e}") from e
@@ -653,6 +899,85 @@ class AsyncChatbot:
             console.log(f"[yellow]Cookie rotation failed: {e}[/yellow]")
             raise
 
+    def _make_sapisid_hash(self) -> Optional[str]:
+        """Create SAPISIDHASH authorization header from current cookies."""
+        cookies = {
+            "__Secure-1PSID": self.secure_1psid,
+            "__Secure-1PSIDTS": self.secure_1psidts,
+        }
+        cookies.update(dict(self.session.cookies))
+        return _make_sapisid_hash(cookies)
+
+    def _get_model_headers(self) -> Dict[str, str]:
+        """Get model-specific headers based on current model selection."""
+        if self.model == Model.UNSPECIFIED:
+            return {}
+        mode = self.model.mode
+        model_header = {
+            "x-goog-ext-525001261-jspb": f"[1,null,null,null,null,null,null,0,[4],null,null,{mode}]"
+        }
+        return model_header
+
+    def _build_request(
+        self,
+        prompt: str,
+        language: str = "en",
+        model: str = "gemini-3.6-flash",
+        expanded_thinking: bool = False,
+        conversation: Optional[Any] = None,
+        uploads: Optional[List[List]] = None,
+        tools: Optional[List] = None,
+        request_uuid: Optional[str] = None,
+    ) -> List[Any]:
+        """Build the 97-element request structure for Gemini API."""
+        image_list = (
+            [[[image_url, 1], image_name] for image_url, image_name in uploads]
+            if uploads
+            else []
+        )
+        turn_index = (
+            getattr(conversation, "turn_index", 0) if conversation is not None else 0
+        )
+        request = [None] * 97
+        request[0] = [prompt, 0, None, image_list, None, None, 0]
+        request[1] = [language]
+        request[2] = [
+            "" if conversation is None else getattr(conversation, "conversation_id", ""),
+            "" if conversation is None else getattr(conversation, "response_id", ""),
+            "" if conversation is None else getattr(conversation, "choice_id", ""),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            "",
+        ]
+        request[6] = [1]
+        request[7] = 1
+        if tools:
+            request[9] = tools
+        request[10] = 1
+        request[11] = 0
+        request[17] = [[turn_index]]
+        request[18] = 0
+        request[27] = 1
+        request[30] = [4]
+        request[41] = [1]
+        request[53] = 0
+        request[59] = request_uuid or str(uuid.uuid4())
+        request[61] = []
+        request[68] = 2
+        # Resolve model mode from registry
+        resolved_model = MODEL_ALIASES.get(model, model)
+        mode = MODELS.get(resolved_model, {}).get("mode", 1)
+        request[79] = mode
+        request[80] = 2 if expanded_thinking else 1
+        request[91] = 0
+        # Gemini Web marks the first turn with 1 and follow-up turns with 0.
+        request[96] = int(conversation is None)
+        return request
+
     async def ask(
         self, message: str, image: Optional[Union[bytes, str, Path]] = None
     ) -> AskResponse:
@@ -668,14 +993,16 @@ class AsyncChatbot:
         Returns:
             dict: A dictionary containing the response content and metadata.
         """
-        if self.SNlM0e is None:
+        if not self.anonymous and self.SNlM0e is None:
             raise RuntimeError("AsyncChatbot not properly initialized. Call AsyncChatbot.create()")
 
         params = {
-            "bl": "boq_assistant-bard-web-server_20240625.13_p0",
+            "bl": self._bl,
             "_reqid": str(self._reqid),
             "rt": "c",
         }
+        if self._sid:
+            params["f.sid"] = self._sid
 
         image_upload_id = None
         if image:
@@ -688,25 +1015,38 @@ class AsyncChatbot:
                 console.log(f"[red]Error uploading image: {e}[/red]")
                 return self._error_response(f"Error uploading image: {e}")
 
+        request_uuid = str(uuid.uuid4()).upper()
+        uploads = []
         if image_upload_id:
-            message_struct = [
-                [message],
-                [[[image_upload_id, 1]]],
-                [self.conversation_id, self.response_id, self.choice_id],
-            ]
-        else:
-            message_struct = [
-                [message],
-                None,
-                [self.conversation_id, self.response_id, self.choice_id],
-            ]
+            uploads = [[[image_upload_id, 1], "image"]]
+
+        message_struct = self._build_request(
+            message,
+            language="en",
+            model=self.model.model_name if self.model != Model.UNSPECIFIED else "gemini-2.0-flash",
+            expanded_thinking=False,
+            conversation=None,
+            uploads=uploads,
+            tools=None,
+            request_uuid=request_uuid,
+        )
 
         data = {
-            "f.req": json.dumps(
-                [None, json.dumps(message_struct, ensure_ascii=False)], ensure_ascii=False
-            ),
-            "at": self.SNlM0e,
+            "f.req": json.dumps([None, json.dumps(message_struct, ensure_ascii=False)], ensure_ascii=False),
         }
+        if self.SNlM0e:
+            data["at"] = self.SNlM0e
+
+        request_headers = {}
+        if self._sid:
+            request_headers["Referer"] = "https://gemini.google.com/app"
+        authorization = self._make_sapisid_hash()
+        if authorization:
+            request_headers["Authorization"] = authorization
+        model_headers = self._get_model_headers()
+        if model_headers:
+            request_headers.update(model_headers)
+            request_headers["x-goog-ext-525005358-jspb"] = f'["{request_uuid}",1]'
 
         resp = None
         try:
@@ -714,6 +1054,7 @@ class AsyncChatbot:
                 Endpoint.GENERATE.value,
                 params=params,
                 data=data,
+                headers=request_headers if request_headers else None,
                 timeout=self.timeout,
             )
             resp.raise_for_status()
@@ -721,63 +1062,59 @@ class AsyncChatbot:
             if resp is None:
                 raise ValueError("Failed to get response from Gemini API")
 
-            lines = resp.text.splitlines()
-            if len(lines) < 3:
-                raise ValueError(
-                    f"Unexpected response format. Status: {resp.status_code}. Content: {resp.text[:200]}..."
-                )
+            response_text = resp.text
+            if not response_text or not response_text.strip():
+                return self._error_response("Empty response from Gemini API")
 
-            chat_data_line = None
+            lines = response_text.splitlines()
+            response_part = None
             for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
                 if line.startswith(")]}'"):
-                    chat_data_line = line[4:].strip()
-                    break
-                elif line.startswith("["):
-                    chat_data_line = line
-                    break
-
-            if not chat_data_line:
-                chat_data_line = lines[3] if len(lines) > 3 else lines[-1]
-                if chat_data_line.startswith(")]}'"):
-                    chat_data_line = chat_data_line[4:].strip()
-
-            response_json = json.loads(chat_data_line)
-
-            body = None
-            body_index = 0
-
-            for part_index, part in enumerate(response_json):
+                    line = line[4:].strip()
                 try:
-                    if isinstance(part, list) and len(part) > 2:
-                        main_part = json.loads(part[2])
-                        if main_part and len(main_part) > 4 and main_part[4]:
-                            body = main_part
-                            body_index = part_index
-                            break
-                except (IndexError, TypeError, json.JSONDecodeError):
+                    payload = json.loads(line)
+                    if isinstance(payload, list):
+                        candidate = _extract_response_part(payload)
+                        if candidate is not None:
+                            # Prefer response parts with actual content
+                            if response_part is None:
+                                response_part = candidate
+                            content = _extract_response_content(candidate)
+                            if content:
+                                response_part = candidate
+                                break
+                except (json.JSONDecodeError, TypeError):
                     continue
 
-            if not body:
+            if response_part is None:
                 return self._error_response("Failed to parse response body. No valid data found.")
 
             try:
-                content = ""
-                if len(body) > 4 and len(body[4]) > 0 and len(body[4][0]) > 1:
-                    content = body[4][0][1][0] if len(body[4][0][1]) > 0 else ""
+                content = _extract_response_content(response_part) or ""
 
                 conversation_id = (
-                    body[1][0] if len(body) > 1 and len(body[1]) > 0 else self.conversation_id
+                    response_part[1][0]
+                    if len(response_part) > 1 and isinstance(response_part[1], list) and len(response_part[1]) > 0
+                    else self.conversation_id
                 )
-                response_id = body[1][1] if len(body) > 1 and len(body[1]) > 1 else self.response_id
+                response_id = (
+                    response_part[1][1]
+                    if len(response_part) > 1 and isinstance(response_part[1], list) and len(response_part[1]) > 1
+                    else self.response_id
+                )
 
-                factualityQueries = body[3] if len(body) > 3 else None
-                textQuery = body[2][0] if len(body) > 2 and body[2] else ""
+                factualityQueries = response_part[3] if len(response_part) > 3 else None
+                textQuery = response_part[2][0] if len(response_part) > 2 and isinstance(response_part[2], list) and response_part[2] else ""
 
                 choices = []
-                if len(body) > 4:
-                    for candidate in body[4]:
+                if len(response_part) > 4 and isinstance(response_part[4], list):
+                    for candidate in response_part[4]:
                         if (
-                            len(candidate) > 1
+                            isinstance(candidate, list)
+                            and len(candidate) > 1
                             and isinstance(candidate[1], list)
                             and len(candidate[1]) > 0
                         ):
@@ -786,135 +1123,17 @@ class AsyncChatbot:
                 choice_id = choices[0]["id"] if choices else self.choice_id
 
                 images = []
-
-                if len(body) > 4 and len(body[4]) > 0 and len(body[4][0]) > 4 and body[4][0][4]:
-                    for img_data in body[4][0][4]:
-                        try:
-                            img_url = img_data[0][0][0]
-                            img_alt = img_data[2] if len(img_data) > 2 else ""
-                            img_title = img_data[1] if len(img_data) > 1 else "[Image]"
-                            images.append({"url": img_url, "alt": img_alt, "title": img_title})
-                        except (IndexError, TypeError):
-                            console.log(
-                                "[yellow]Warning: Could not parse image data structure (format 1).[/yellow]"
-                            )
-                            continue
-
-                generated_images = []
-                if len(body) > 4 and len(body[4]) > 0 and len(body[4][0]) > 12 and body[4][0][12]:
-                    try:
-                        if body[4][0][12][7] and body[4][0][12][7][0]:
-                            for img_index, img_data in enumerate(body[4][0][12][7][0]):
-                                try:
-                                    img_url = img_data[0][3][3]
-                                    img_title = f"[Generated Image {img_index + 1}]"
-                                    img_alt = (
-                                        img_data[3][5][0]
-                                        if len(img_data[3]) > 5 and len(img_data[3][5]) > 0
-                                        else ""
-                                    )
-                                    generated_images.append(
-                                        {"url": img_url, "alt": img_alt, "title": img_title}
-                                    )
-                                except (IndexError, TypeError):
-                                    continue
-
-                            if not generated_images:
-                                for part_index, part in enumerate(response_json):
-                                    if part_index <= body_index:
-                                        continue
-                                    try:
-                                        img_part = json.loads(part[2])
-                                        if img_part[4][0][12][7][0]:
-                                            for img_index, img_data in enumerate(
-                                                img_part[4][0][12][7][0]
-                                            ):
-                                                try:
-                                                    img_url = img_data[0][3][3]
-                                                    img_title = f"[Generated Image {img_index + 1}]"
-                                                    img_alt = (
-                                                        img_data[3][5][0]
-                                                        if len(img_data[3]) > 5
-                                                        and len(img_data[3][5]) > 0
-                                                        else ""
-                                                    )
-                                                    generated_images.append(
-                                                        {
-                                                            "url": img_url,
-                                                            "alt": img_alt,
-                                                            "title": img_title,
-                                                        }
-                                                    )
-                                                except (IndexError, TypeError):
-                                                    continue
-                                            break
-                                    except (IndexError, TypeError, json.JSONDecodeError):
-                                        continue
-                    except (IndexError, TypeError):
-                        pass
-
-                if len(generated_images) == 0 and len(body) > 4 and len(body[4]) > 0:
-                    try:
-                        candidate = body[4][0]
-                        if len(candidate) > 22 and candidate[22]:
-                            import re
-
-                            content = (
-                                candidate[22][0]
-                                if isinstance(candidate[22], list) and len(candidate[22]) > 0
-                                else str(candidate[22])
-                            )
-                            urls = re.findall(r"https?://[^\s]+", content)
-                            for i, url in enumerate(urls):
-                                if url[-1] in [".", ",", ")", "]", "}", '"', "'"]:
-                                    url = url[:-1]
-                                generated_images.append(
-                                    {"url": url, "title": f"[Generated Image {i + 1}]", "alt": ""}
-                                )
-                    except (IndexError, TypeError) as e:
-                        console.log(
-                            f"[yellow]Warning: Could not parse alternative image structure: {e}[/yellow]"
-                        )
-
-                if len(images) == 0 and len(generated_images) == 0 and content:
-                    try:
-                        import re
-
-                        urls = re.findall(
-                            r"(https?://[^\s]+\.(jpg|jpeg|png|gif|webp))", content.lower()
-                        )
-
-                        google_urls = re.findall(
-                            r"(https?://lh\d+\.googleusercontent\.com/[^\s]+)", content
-                        )
-
-                        general_urls = re.findall(r"(https?://[^\s]+)", content)
-
-                        all_urls = []
-                        if urls:
-                            all_urls.extend([url_tuple[0] for url_tuple in urls])
-                        if google_urls:
-                            all_urls.extend(google_urls)
-
-                        if not all_urls and general_urls:
-                            all_urls = general_urls
-
-                        if all_urls:
-                            for i, url in enumerate(all_urls):
-                                if url[-1] in [".", ",", ")", "]", "}", '"', "'"]:
-                                    url = url[:-1]
-                                images.append(
-                                    {"url": url, "title": f"[Image in Content {i + 1}]", "alt": ""}
-                                )
-                            console.log(
-                                f"[green]Found {len(all_urls)} potential image URLs in content.[/green]"
-                            )
-                    except Exception as e:
-                        console.log(
-                            f"[yellow]Warning: Error extracting URLs from content: {e}[/yellow]"
-                        )
-
-                all_images = images + generated_images
+                if len(response_part) > 4 and isinstance(response_part[4], list) and len(response_part[4]) > 0:
+                    candidate = response_part[4][0]
+                    if isinstance(candidate, list) and len(candidate) > 4 and candidate[4]:
+                        for img_data in candidate[4]:
+                            try:
+                                img_url = img_data[0][0][0]
+                                img_alt = img_data[2] if len(img_data) > 2 else ""
+                                img_title = img_data[1] if len(img_data) > 1 else "[Image]"
+                                images.append({"url": img_url, "alt": img_alt, "title": img_title})
+                            except (IndexError, TypeError):
+                                continue
 
                 results: AskResponse = {
                     "content": content,
@@ -923,7 +1142,7 @@ class AsyncChatbot:
                     "factualityQueries": factualityQueries,
                     "textQuery": textQuery,
                     "choices": choices,
-                    "images": all_images,
+                    "images": images,
                     "error": False,
                 }
 
