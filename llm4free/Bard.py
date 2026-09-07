@@ -15,6 +15,8 @@ from pydantic import BaseModel, field_validator
 from requests.exceptions import HTTPError, RequestException, Timeout
 from rich.console import Console
 
+from llm4free.requests import get_args_from_cdp
+
 console = Console()
 
 
@@ -230,6 +232,34 @@ def load_cookies(cookie_path: str) -> Tuple[str, str]:
         raise Exception(f"An unexpected error occurred while loading cookies: {e}")
 
 
+def _extract_bard_cookies(cookies: List[Dict[str, Any]]) -> Tuple[str, str]:
+    """Extract ``__Secure-1PSID`` and ``__Secure-1PSIDTS`` from CDP cookies.
+
+    Args:
+        cookies: Cookie list returned by :func:`llm4free.requests.get_args_from_cdp`.
+
+    Returns:
+        Tuple of ``(__Secure-1PSID, __Secure-1PSIDTS)`` values.
+
+    Raises:
+        ValueError: If either required cookie is missing.
+    """
+    secure_1psid = None
+    secure_1psidts = None
+    for cookie in cookies:
+        name = cookie.get("name", "")
+        if name.upper() == "__SECURE-1PSID":
+            secure_1psid = cookie.get("value")
+        elif name.upper() == "__SECURE-1PSIDTS":
+            secure_1psidts = cookie.get("value")
+
+    if not secure_1psid or not secure_1psidts:
+        raise ValueError(
+            "Required cookies (__Secure-1PSID or __Secure-1PSIDTS) not found in CDP cookies."
+        )
+    return secure_1psid, secure_1psidts
+
+
 class Chatbot:
     """
     Synchronous wrapper for the AsyncChatbot class.
@@ -280,6 +310,57 @@ class Chatbot:
 
     def ask(self, message: str, image: Optional[Union[bytes, str, Path]] = None) -> AskResponse:
         return self.loop.run_until_complete(self.async_chatbot.ask(message, image=image))
+
+    @classmethod
+    def from_cdp(
+        cls,
+        proxy: Optional[Union[str, Dict[str, str]]] = None,
+        timeout: int = 20,
+        model: Model = Model.UNSPECIFIED,
+        impersonate: str = "chrome110",
+        cdp_timeout: int = 120,
+    ) -> "Chatbot":
+        """Create a :class:`Chatbot` using CDP-harvested Gemini cookies.
+
+        Opens a browser via :func:`llm4free.requests.get_args_from_cdp`,
+        navigates to ``https://gemini.google.com``, and extracts the required
+        ``__Secure-1PSID`` / ``__Secure-1PSIDTS`` cookies automatically.
+
+        Args:
+            proxy: Optional proxy URL or dict forwarded to the CDP browser.
+            timeout: Request timeout for Gemini API calls.
+            model: Default model enum member.
+            impersonate: Browser profile for ``curl_cffi`` requests.
+            cdp_timeout: Max seconds to wait for the Gemini page to load.
+
+        Returns:
+            A ready-to-use :class:`Chatbot` instance.
+        """
+        try:
+            loop: asyncio.AbstractEventLoop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+        cdp_args = loop.run_until_complete(
+            get_args_from_cdp(
+                url="https://gemini.google.com",
+                proxy=proxy if isinstance(proxy, str) else None,
+                timeout=cdp_timeout,
+            )
+        )
+        secure_1psid, secure_1psidts = _extract_bard_cookies(cdp_args["cookies"])
+
+        instance = cls.__new__(cls)
+        instance.loop = loop
+        instance.secure_1psid = secure_1psid
+        instance.secure_1psidts = secure_1psidts
+        instance.async_chatbot = loop.run_until_complete(
+            AsyncChatbot.create(
+                secure_1psid, secure_1psidts, proxy, timeout, model, impersonate
+            )
+        )
+        return instance
 
 
 class AsyncChatbot:
@@ -388,6 +469,41 @@ class AsyncChatbot:
             await instance.session.close()
             raise
         return instance
+
+    @classmethod
+    async def create_from_cdp(
+        cls,
+        proxy: Optional[Union[str, Dict[str, str]]] = None,
+        timeout: int = 20,
+        model: Model = Model.UNSPECIFIED,
+        impersonate: str = "chrome110",
+        cdp_timeout: int = 120,
+    ) -> "AsyncChatbot":
+        """Create an :class:`AsyncChatbot` using CDP-harvested Gemini cookies.
+
+        Opens a browser via :func:`llm4free.requests.get_args_from_cdp`,
+        navigates to ``https://gemini.google.com``, and extracts the required
+        ``__Secure-1PSID`` / ``__Secure-1PSIDTS`` cookies automatically.
+
+        Args:
+            proxy: Optional proxy URL or dict forwarded to the CDP browser.
+            timeout: Request timeout for Gemini API calls.
+            model: Default model enum member.
+            impersonate: Browser profile for ``curl_cffi`` requests.
+            cdp_timeout: Max seconds to wait for the Gemini page to load.
+
+        Returns:
+            A ready-to-use :class:`AsyncChatbot` instance.
+        """
+        cdp_args = await get_args_from_cdp(
+            url="https://gemini.google.com",
+            proxy=proxy if isinstance(proxy, str) else None,
+            timeout=cdp_timeout,
+        )
+        secure_1psid, secure_1psidts = _extract_bard_cookies(cdp_args["cookies"])
+        return await cls.create(
+            secure_1psid, secure_1psidts, proxy, timeout, model, impersonate
+        )
 
     def _error_response(self, message: str) -> AskResponse:
         """Helper to create a consistent error response."""
