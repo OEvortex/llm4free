@@ -2,7 +2,7 @@
 Browser configuration for the lightweight CDP client.
 
 This mirrors the small ``BrowserConfig`` shim used by gpt4free so that ported
-providers and :mod:`llm4free.requests.cdp` can read a single, consistent
+providers and :mod:`llm4free.browser_requests.cdp` can read a single, consistent
 source of truth for the Chrome executable path and the CDP host/port.
 
 Override any of these attributes at runtime (or via environment variables) to

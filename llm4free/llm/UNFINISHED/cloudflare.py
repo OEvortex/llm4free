@@ -57,7 +57,7 @@ from llm4free.llm.utils import (
     count_tokens,
     format_prompt,
 )
-from llm4free.requests.cdp import CDPSession
+from llm4free.browser_requests.cdp import CDPSession
 
 # Cloudflare AI Playground endpoint.
 URL = "https://playground.ai.cloudflare.com"

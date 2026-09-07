@@ -1,4 +1,4 @@
-"""Tests for the agent-browser-backed CDP client (llm4free.requests.cdp).
+"""Tests for the agent-browser-backed CDP client (llm4free.browser_requests.cdp).
 
 These tests mock ``subprocess.run`` so no real browser / Chrome is required.
 They verify that the CDPSession / SyncCDPSession wrappers shell out correctly
@@ -13,8 +13,8 @@ import unittest
 from typing import Any, Dict, List
 from unittest.mock import MagicMock, patch
 
-from llm4free.requests import cdp as cdp_module
-from llm4free.requests.cdp import CDPSession, SyncCDPSession, find_agent_browser
+from llm4free.browser_requests import cdp as cdp_module
+from llm4free.browser_requests.cdp import CDPSession, SyncCDPSession, find_agent_browser
 
 
 def _agent_browser_json(data: Dict[str, Any], success: bool = True) -> str:

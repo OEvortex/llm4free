@@ -15,7 +15,7 @@ from pydantic import BaseModel, field_validator
 from requests.exceptions import HTTPError, RequestException, Timeout
 from rich.console import Console
 
-from llm4free.requests import get_args_from_cdp
+from llm4free.browser_requests import get_args_from_cdp
 
 console = Console()
 
@@ -236,7 +236,7 @@ def _extract_bard_cookies(cookies: List[Dict[str, Any]]) -> Tuple[str, str]:
     """Extract ``__Secure-1PSID`` and ``__Secure-1PSIDTS`` from CDP cookies.
 
     Args:
-        cookies: Cookie list returned by :func:`llm4free.requests.get_args_from_cdp`.
+        cookies: Cookie list returned by :func:`llm4free.browser_requests.get_args_from_cdp`.
 
     Returns:
         Tuple of ``(__Secure-1PSID, __Secure-1PSIDTS)`` values.
@@ -322,7 +322,7 @@ class Chatbot:
     ) -> "Chatbot":
         """Create a :class:`Chatbot` using CDP-harvested Gemini cookies.
 
-        Opens a browser via :func:`llm4free.requests.get_args_from_cdp`,
+        Opens a browser via :func:`llm4free.browser_requests.get_args_from_cdp`,
         navigates to ``https://gemini.google.com``, and extracts the required
         ``__Secure-1PSID`` / ``__Secure-1PSIDTS`` cookies automatically.
 
@@ -481,7 +481,7 @@ class AsyncChatbot:
     ) -> "AsyncChatbot":
         """Create an :class:`AsyncChatbot` using CDP-harvested Gemini cookies.
 
-        Opens a browser via :func:`llm4free.requests.get_args_from_cdp`,
+        Opens a browser via :func:`llm4free.browser_requests.get_args_from_cdp`,
         navigates to ``https://gemini.google.com``, and extracts the required
         ``__Secure-1PSID`` / ``__Secure-1PSIDTS`` cookies automatically.
 
