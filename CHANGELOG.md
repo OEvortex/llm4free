@@ -17,6 +17,7 @@ All notable changes to this project will be documented in this file.
 
 ### 🚚 Moved
 - **Test imports** — Sorted import blocks in `tests/test_tts_live.py` and `tests/search/test_serpbase.py` to satisfy linting.
+- **ChatGptOss** — Removed provider after live testing showed the domain is parked/expired and the API is unreachable. Deleted `llm4free/llm/chatgpt_oss.py` and cleaned up exports in `llm4free/llm/__init__.py`.
 
 ## [2026.07.16] - 2026-07-16
 
