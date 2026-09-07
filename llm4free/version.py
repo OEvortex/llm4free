@@ -1,2 +1,2 @@
-__version__ = "2026.8.1"
+__version__ = "2026.9.7"
 __prog__ = "llm4free"
