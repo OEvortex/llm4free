@@ -253,36 +253,32 @@ class Toolbaz(OpenAICompatibleProvider):
     required_auth = False
     AVAILABLE_MODELS = [
         # Google
-        "gemini-3-flash",
-        "gemini-3.1-flash-lite",
-        "gemini-2.5-flash",
-        "gemini-2.5-pro",
-        "gemini-2.0-flash-thinking",
-        "gemini-2.0-flash",
+        "Gemini 3.7 Flash",
+        "Gemini 3.5 Flash",
+        "Gemini-3-Flash",
+        "Gemini 3.1 Pro",
+        "Gemini-2.5-Pro",
+        "Gemini-2.5-Flash",
         # Anthropic
-        "claude-sonnet-4",
+        "Claude-Sonnet-4",
         # OpenAI
-        "gpt-5",
-        "gpt-5.2",
-        "gpt-oss-120b",
-        "o3-mini",
-        "gpt-4o",
-        "gpt-4o-latest",
+        "GPT-5",
+        "GPT-4o (latest)",
+        "GPT-OSS-120B",
+        "GPT-4o",
         # xAI
-        "grok-4-fast",
+        "Grok-4-Fast",
         # ToolBaz
-        "toolbaz-v4.5-fast",
-        "toolbaz_v4",
-        # DeepSeek (streaming may fail)
-        "deepseek-v3.1",
-        "deepseek-v3",
-        "deepseek-r1",
-        # Meta (Facebook)
-        "Llama-4-Maverick",
-        # Unfiltered (streaming may fail)
-        "midnight-rose",
-        "unfiltered_x",
-        "L3-70B-Euryale-v2.1",
+        "ToolBaz-v4.5-Fast",
+        "ToolBaz-v4",
+        "ToolBaz-v3.5-Pro",
+        "ToolBaz-v3",
+        # DeepSeek
+        "Deepseek-V3.1",
+        "DeepSeek-V3",
+        "Deepseek-R1-Distill",
+        # Meta
+        "Llama-3.3 (70B)",
     ]
 
     def __init__(self, timeout: int = 30, proxies: dict = {}, browser: str = "chrome"):
