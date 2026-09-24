@@ -9,6 +9,7 @@ import aiohttp
 
 from llm4free.AIbase import SearchResponse
 from llm4free.AISEARCH import (
+    BraveSearch,
     IAsk,
     Monica,
     Perplexity,
@@ -170,6 +171,45 @@ class TestAISEARCHProviders(unittest.TestCase):
         gen = ai.search("Hi", stream=True)
         result = "".join(str(x) for x in cast(GeneratorType[Any, Any, Any], gen))
         self.assertIn("Hello", result)
+
+    def test_brave_search_stream_formats_token_deltas(self):
+        ai = BraveSearch()
+        ai._iter_stream = MagicMock(
+            return_value=iter(
+                [
+                    '{"type":"text_delta","delta":"Read"}',
+                    '{"type":"text_delta","delta":"able "}',
+                    '{"type":"text_delta","delta":"result"}',
+                ]
+            )
+        )
+
+        chunks = list(ai.search("Hi", stream=True))
+
+        self.assertEqual(len(chunks), 1)
+        result = "".join(str(chunk) for chunk in chunks)
+        self.assertEqual(result, "Readable result")
+        self.assertEqual(str(ai.last_response), result)
+
+    def test_brave_search_raw_stream_preserves_deltas(self):
+        ai = BraveSearch()
+        raw_lines = [
+            '{"type":"text_delta","delta":"Read"}',
+            '{"type":"text_delta","delta":"able"}',
+        ]
+        ai._iter_stream = MagicMock(return_value=iter(raw_lines))
+
+        result = list(ai.search("Hi", stream=True, raw=True))
+
+        self.assertEqual(result, raw_lines)
+
+    def test_brave_search_stream_chunks_long_text_without_splitting_words(self):
+        ai = BraveSearch()
+        chunks, remainder = ai._drain_readable_chunks("word " * 200 + "remainder", final=True)
+
+        self.assertEqual("".join(chunks), "word " * 200 + "remainder")
+        self.assertEqual(remainder, "")
+        self.assertTrue(all(len(chunk) <= 800 for chunk in chunks))
 
 
 if __name__ == "__main__":

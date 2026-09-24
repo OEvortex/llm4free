@@ -11,6 +11,7 @@ from .duckduckgo_main import DuckDuckGoSearch
 
 # Import new search engines
 from .engines.mojeek import Mojeek
+from .engines.parallel import Parallel
 from .engines.serpbase import SerpBase
 from .engines.wikipedia import Wikipedia
 
@@ -32,6 +33,7 @@ SEARCH_PROVIDERS: Dict[str, Type[BaseSearchEngine]] = cast(
         "BraveSearch": BraveSearch,
         "DuckDuckGoSearch": DuckDuckGoSearch,
         "Mojeek": Mojeek,
+        "Parallel": Parallel,
         "SerpBase": SerpBase,
         "Wikipedia": Wikipedia,
         "YahooSearch": YahooSearch,
@@ -62,6 +64,7 @@ __all__ = [
     "YahooSearch",
     # Individual engines
     "Mojeek",
+    "Parallel",
     "SerpBase",
     "Wikipedia",
     # Registry

@@ -1,6 +1,6 @@
 # LLM4Free Search Module
 
-> Last updated: 2026-07-16
+> Last updated: 2026-09-24
 > Audience: Developers integrating web search into Python applications
 
 LLM4Free's search module provides unified access to multiple search engines through a consistent Python API and CLI. All engines return typed result dataclasses that support both attribute and dict-style access.
@@ -23,6 +23,7 @@ LLM4Free's search module provides unified access to multiple search engines thro
 - [Bing](#bing)
 - [Brave](#brave)
 - [Yahoo](#yahoo)
+- [Parallel](#parallel)
 - [Low-Level Engines](#low-level-engines)
 - [CLI](#cli)
 - [Processing Results](#processing-results)
@@ -55,7 +56,7 @@ for r in results:
 
 | Category     | Engines                                                        |
 | ------------ | -------------------------------------------------------------- |
-| `text`       | DuckDuckGo, Bing, Brave, Yahoo, Mojeek, Wikipedia, SerpBase    |
+| `text`       | DuckDuckGo, Bing, Brave, Yahoo, Mojeek, Wikipedia, SerpBase, Parallel |
 | `images`     | DuckDuckGo, Bing, Brave, Yahoo, SerpBase                        |
 | `videos`     | DuckDuckGo, Brave, Yahoo                                        |
 | `news`       | DuckDuckGo, Bing, Brave, Yahoo                                  |
@@ -66,7 +67,7 @@ for r in results:
 | `maps`       | DuckDuckGo                                                     |
 
 > [!WARNING]
-> `SerpBase` requires an API key (`required_auth = True`). All other engines work without authentication. The engine registry is defined in [`llm4free/search/__init__.py`](../../llm4free/search/__init__.py).
+> `SerpBase` requires an API key (`required_auth = True`). Parallel uses a public MCP endpoint and does not require an API key, but public access is subject to Parallel's free-tier rate limits and terms. All other engines work without authentication. The engine registry is defined in [`llm4free/search/__init__.py`](../../llm4free/search/__init__.py).
 
 ---
 
@@ -80,6 +81,7 @@ from llm4free import (
     BingSearch,        # Text, images, news, suggestions
     BraveSearch,       # Text, images, videos, news, suggestions
     YahooSearch,       # Text, images, videos, news, suggestions, weather
+    Parallel,          # LLM-friendly text search through Parallel's public MCP endpoint
     Mojeek,            # Text only (independent European engine)
     Wikipedia,         # Text only (encyclopedia)
     SerpBase,          # Text, images (requires API key)
@@ -475,9 +477,63 @@ The CLI uses `--engine` (`-e`) to select the backend. DuckDuckGo is the default.
 llm4free text -k "python programming"
 llm4free text -k "python programming" -e brave
 llm4free text -k "quantum physics" -e wikipedia
+llm4free text -k "latest Python release" -e parallel
 
 # Image search
 llm4free images -k "cyberpunk art" -e bing
+
+---
+
+## Parallel
+
+Parallel provides LLM-friendly text search through its public MCP endpoint. It returns the same `TextResult` objects as LLM4Free's other text engines and does not require an API key.
+
+### Typed Results
+
+```python
+from llm4free import Parallel
+
+parallel = Parallel(timeout=60)
+results = parallel.search(
+    "current Python release features",
+    max_results=5,
+)
+
+for result in results:
+    print(f"{result.title}: {result.href}")
+    print(result.body)
+```
+
+Use `objective` to describe what the answer should accomplish and `search_queries` to provide one or more related query variants:
+
+```python
+results = parallel.search(
+    "python release",
+    objective="Find the latest stable Python release and its new features",
+    search_queries=[
+        "latest stable Python release",
+        "what's new in the latest Python",
+    ],
+    max_results=5,
+)
+```
+
+The same options are available through `search_text()`, which returns Parallel's concatenated MCP text content instead of typed results:
+
+```python
+text = parallel.search_text(
+    "python release",
+    objective="Summarize the latest Python release",
+)
+print(text)
+```
+
+`model_name`, `session_id`, and a per-request `timeout` can also be supplied when supported by the endpoint. A provider instance automatically initializes and reuses its MCP session.
+
+> [!NOTE]
+> Parallel determines relevance independently. The `region`, `safesearch`, `timelimit`, and `page` parameters are accepted for compatibility with `BaseSearchEngine` but are not forwarded to Parallel. `max_results` limits the returned results locally.
+
+
 
 # News
 llm4free news -k "space exploration" -e yahoo
@@ -574,6 +630,14 @@ def search_all(query, max_results=5):
 results = search_all("python programming", max_results=5)
 for r in results:
     print(f"{r['title']}: {r['href']}")
+```
+
+Low-level engines use a different call signature. For example, Parallel exposes `search()` directly:
+
+```python
+from llm4free import Parallel
+
+results = Parallel().search("python programming", max_results=5)
 ```
 
 ---
@@ -751,6 +815,16 @@ results = engine.run("test query", max_results=5)
 | `news`        | `(keywords, region="us", safesearch="moderate", max_results=None)` | `List[NewsResult]`   |
 | `suggestions` | `(keywords, region="us")`                            | `List[str]`           |
 | `weather`     | `(keywords)`                                         | `List[dict]`          |
+
+### Parallel
+
+| Method        | Signature | Returns |
+| ------------- | --------- | ------- |
+| `search`      | `(query, region="us-en", safesearch="moderate", timelimit=None, page=1, objective=None, search_queries=None, session_id=None, model_name=None, timeout=None, max_results=None)` | `List[TextResult]` |
+| `search_text` | `(query, *, objective=None, search_queries=None, session_id=None, model_name=None, timeout=None)` | `str` |
+| `run`         | `(query, region=None, safesearch=None, max_results=None, **kwargs)` | `List[TextResult]` |
+
+Parallel's `search()` converts structured MCP results into `TextResult` objects. If structured results are unavailable but the endpoint returns text, that text is preserved as a single result. `region`, `safesearch`, `timelimit`, and `page` are accepted only for interface compatibility.
 
 ### SerpBase
 

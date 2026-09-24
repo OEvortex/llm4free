@@ -376,7 +376,7 @@ if __name__ == "__main__":
                 messages=[{"role": "user", "content": "Say 'Hello' in one word"}],
                 stream=False,
             )
-            content = response.choices[0].message.content or ""
+            content = response.choices[0].message.content or ""  # ty:ignore[unresolved-attribute]
             print(f"{model:<50} {'OK':<10} {content[:30]}")
         except Exception as e:
             print(f"{model:<50} {'FAIL':<10} {type(e).__name__}: {e}")

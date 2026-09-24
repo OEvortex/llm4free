@@ -1,7 +1,6 @@
 import base64
 import json
 import os
-import re
 import time
 from typing import Any, Dict, Generator, List, Optional, Union
 from urllib.parse import quote, urlencode
@@ -141,14 +140,25 @@ class BraveSearch(AISearch):
 
         return None
 
-    def _iter_chunks(self, text: str) -> Generator[str, None, None]:
-        """Yield response string in readable chunks for streaming."""
-        for line in text.splitlines(keepends=True):
-            if line.strip() == "":
-                yield line
-                continue
-            for chunk in re.findall(r".{1,800}(?:\s+|$)", line):
-                yield chunk
+    def _drain_readable_chunks(self, text: str, final: bool = False) -> tuple[List[str], str]:
+        """Split buffered text into readable chunks, retaining a partial word."""
+        if not text:
+            return [], ""
+
+        chunks: List[str] = []
+        while len(text) >= 800:
+            split_at = text.rfind(" ", 1, 800)
+            if split_at <= 0:
+                split_at = 800
+            else:
+                split_at += 1
+            chunks.append(text[:split_at])
+            text = text[split_at:]
+
+        if final and text:
+            chunks.append(text)
+            text = ""
+        return chunks, text
 
     def search(
         self,
@@ -181,26 +191,40 @@ class BraveSearch(AISearch):
 
         def for_stream():
             full_text = ""
+            buffer = ""
             try:
                 for raw_line in self._iter_stream(prompt, is_deep, max_retries, effective_timeout):
                     if raw:
                         yield raw_line
-                    else:
-                        try:
-                            event = json.loads(raw_line)
-                        except json.JSONDecodeError:
-                            continue
-                        event_type = event.get("type", "")
-                        if event_type == "text_delta":
-                            delta = event.get("delta", "")
-                            if delta:
-                                full_text += delta
-                                yield SearchResponse(delta)
-                        elif event_type == "research":
-                            status = self._process_research_event(event)
-                            if status:
-                                full_text += f"\n{status}\n"
-                                yield SearchResponse(f"\n{status}\n")
+                        continue
+
+                    try:
+                        event = json.loads(raw_line)
+                    except json.JSONDecodeError:
+                        continue
+
+                    event_type = event.get("type", "")
+                    if event_type == "text_delta":
+                        delta = event.get("delta", "")
+                        if isinstance(delta, str) and delta:
+                            full_text += delta
+                            buffer += delta
+                            chunks, buffer = self._drain_readable_chunks(buffer)
+                            for chunk in chunks:
+                                yield SearchResponse(chunk)
+                    elif event_type == "research":
+                        status = self._process_research_event(event)
+                        if status:
+                            chunks, buffer = self._drain_readable_chunks(buffer, final=True)
+                            for chunk in chunks:
+                                yield SearchResponse(chunk)
+                            status_chunk = f"\n{status}\n"
+                            full_text += status_chunk
+                            yield SearchResponse(status_chunk)
+
+                chunks, _ = self._drain_readable_chunks(buffer, final=True)
+                for chunk in chunks:
+                    yield SearchResponse(chunk)
             finally:
                 if not raw:
                     self.last_response = SearchResponse(full_text)

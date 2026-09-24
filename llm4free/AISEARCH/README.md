@@ -23,7 +23,7 @@
 | **Perplexity** | Advanced AI search & chat | Multiple modes, model selection, source control |
 | **IAsk** | Multi-mode research | Academic, Question, Fast modes, detail levels |
 | **Monica** | Comprehensive AI search | Clean formatted responses, web integration |
-| **BraveAI** | Privacy-focused AI search | Fast, accurate, web-integrated responses |
+| **Brave Search** | Privacy-focused AI search | Standard answers, deep research, formatted streaming |
 | **WebPilotAI** | Web-integrated analysis | Content extraction, source references |
 | **Stellar** | Agentic AI search | Next.js powered, deep search capabilities (Quota limited) |
 
@@ -40,10 +40,10 @@ pip install -U llm4free
 All AI Search providers follow a consistent usage pattern:
 
 ```python
-from llm4free.Provider.AISEARCH import PERPLEXED
+from llm4free import Perplexity
 
 # Initialize the provider
-ai = PERPLEXED()
+ai = Perplexity()
 
 # Basic search
 response = ai.search("Your query here")
@@ -60,7 +60,7 @@ for chunk in ai.search("Your query here", stream=True):
 <summary><strong>Perplexity Example</strong></summary>
 
 ```python
-from llm4free.Provider.AISEARCH import Perplexity
+from llm4free import Perplexity
 
 ai = Perplexity()
 
@@ -78,7 +78,7 @@ for chunk in ai.search("Explain black holes", stream=True):
 <summary><strong>IAsk Example</strong></summary>
 
 ```python
-from llm4free.Provider.AISEARCH import IAsk
+from llm4free import IAsk
 
 # Initialize with academic mode
 ai = IAsk(mode="academic")
@@ -86,6 +86,42 @@ ai = IAsk(mode="academic")
 response = ai.search("Recent developments in mRNA vaccines")
 print(response)
 ```
+</details>
+
+<details>
+<summary><strong>Brave Search Example</strong></summary>
+
+```python
+from llm4free.AISEARCH import BraveSearch
+
+ai = BraveSearch(timeout=60)
+
+# Standard Brave Ask response
+response = ai.search("What is Python?")
+print(response)
+
+# Formatted streaming: token deltas are combined into readable chunks
+for chunk in ai.search("Explain Python generators", stream=True):
+    print(chunk, end="", flush=True)
+
+# The complete streamed answer is also available afterward
+print(ai.last_response)
+
+# Deep Research uses a longer timeout and can take several minutes
+research = ai.search(
+    "Compare the current state of web search engines",
+    model="brave-deep-research",
+    stream=False,
+    max_retries=3,
+)
+print(research)
+
+# Raw mode exposes the original provider stream for custom processing/debugging
+raw_stream = ai.search("What is Python?", stream=True, raw=True)
+```
+
+`stream=True` groups small upstream token deltas into readable chunks of at most 800 characters while retaining partial words until more text arrives. Set `raw=True` when the unmodified provider lines are required. Deep Research accepts the same options and emits progress status messages alongside the final answer.
+
 </details>
 
 ## 🛡️ Error Handling

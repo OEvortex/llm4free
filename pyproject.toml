@@ -64,6 +64,7 @@ dependencies = [
     "pydantic",
     "openai>=2.43.0",
     "requests>=2.32.5",
+    "lxml>=6.0.2",
 ]
 
 [project.scripts]
