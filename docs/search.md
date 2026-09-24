@@ -23,9 +23,9 @@ LLM4Free's search module provides unified access to multiple search engines thro
 - [Bing](#bing)
 - [Brave](#brave)
 - [Yahoo](#yahoo)
-- [Parallel](#parallel)
 - [Low-Level Engines](#low-level-engines)
 - [CLI](#cli)
+- [Parallel](#parallel)
 - [Processing Results](#processing-results)
 - [Multi-Engine Search](#multi-engine-search)
 - [Combining Search with AI](#combining-search-with-ai)
@@ -54,17 +54,17 @@ for r in results:
 
 ## Engine Capabilities
 
-| Category     | Engines                                                        |
-| ------------ | -------------------------------------------------------------- |
-| `text`       | DuckDuckGo, Bing, Brave, Yahoo, Mojeek, Wikipedia, SerpBase, Parallel |
-| `images`     | DuckDuckGo, Bing, Brave, Yahoo, SerpBase                        |
-| `videos`     | DuckDuckGo, Brave, Yahoo                                        |
-| `news`       | DuckDuckGo, Bing, Brave, Yahoo                                  |
-| `suggestions`| DuckDuckGo, Bing, Brave, Yahoo                                 |
-| `weather`    | DuckDuckGo, Yahoo                                              |
-| `answers`    | DuckDuckGo                                                     |
-| `translate`  | DuckDuckGo                                                     |
-| `maps`       | DuckDuckGo                                                     |
+| Category      | Engines                                                             |
+| ------------- | ------------------------------------------------------------------- |
+| `text`        | DuckDuckGo, Bing, Brave, Yahoo, Mojeek, Wikipedia, SerpBase, Parallel |
+| `images`      | DuckDuckGo, Bing, Brave, Yahoo, SerpBase                            |
+| `videos`      | DuckDuckGo, Brave, Yahoo                                            |
+| `news`        | DuckDuckGo, Bing, Brave, Yahoo                                      |
+| `suggestions` | DuckDuckGo, Bing, Brave, Yahoo                                      |
+| `weather`     | DuckDuckGo, Yahoo                                                   |
+| `answers`     | DuckDuckGo                                                          |
+| `translate`   | DuckDuckGo                                                          |
+| `maps`        | DuckDuckGo                                                          |
 
 > [!WARNING]
 > `SerpBase` requires an API key (`required_auth = True`). Parallel uses a public MCP endpoint and does not require an API key, but public access is subject to Parallel's free-tier rate limits and terms. All other engines work without authentication. The engine registry is defined in [`llm4free/search/__init__.py`](../../llm4free/search/__init__.py).
@@ -92,7 +92,7 @@ from llm4free import (
 
 ## Result Types
 
-The main interfaces (`DuckDuckGoSearch`, `BingSearch`, `BraveSearch`, `YahooSearch`, `SerpBase`) return typed dataclasses. Low-level engines (`Mojeek`, `Wikipedia`) return `TextResult`.
+The main interfaces (`DuckDuckGoSearch`, `BingSearch`, `BraveSearch`, `YahooSearch`, `SerpBase`) return typed dataclasses. Low-level engines (`Mojeek`, `Parallel`, `Wikipedia`) return `TextResult`.
 
 ```python
 from llm4free.search.results import TextResult, ImagesResult, VideosResult, NewsResult
@@ -482,6 +482,21 @@ llm4free text -k "latest Python release" -e parallel
 # Image search
 llm4free images -k "cyberpunk art" -e bing
 
+# News
+llm4free news -k "space exploration" -e yahoo
+
+# Weather
+llm4free weather -l "London"
+
+# Suggestions
+llm4free suggestions -q "artificial i"
+
+# Translate
+llm4free translate -k "Hola mundo" --to en
+```
+
+See [cli.md](cli.md) for the full CLI reference.
+
 ---
 
 ## Parallel
@@ -532,23 +547,6 @@ print(text)
 
 > [!NOTE]
 > Parallel determines relevance independently. The `region`, `safesearch`, `timelimit`, and `page` parameters are accepted for compatibility with `BaseSearchEngine` but are not forwarded to Parallel. `max_results` limits the returned results locally.
-
-
-
-# News
-llm4free news -k "space exploration" -e yahoo
-
-# Weather
-llm4free weather -l "London"
-
-# Suggestions
-llm4free suggestions -q "artificial i"
-
-# Translate
-llm4free translate -k "Hola mundo" --to en
-```
-
-See [cli.md](cli.md) for the full CLI reference.
 
 ---
 
@@ -822,7 +820,7 @@ results = engine.run("test query", max_results=5)
 | ------------- | --------- | ------- |
 | `search`      | `(query, region="us-en", safesearch="moderate", timelimit=None, page=1, objective=None, search_queries=None, session_id=None, model_name=None, timeout=None, max_results=None)` | `List[TextResult]` |
 | `search_text` | `(query, *, objective=None, search_queries=None, session_id=None, model_name=None, timeout=None)` | `str` |
-| `run`         | `(query, region=None, safesearch=None, max_results=None, **kwargs)` | `List[TextResult]` |
+| `run`         | `(*args, **kwargs)` | `List[TextResult]` |
 
 Parallel's `search()` converts structured MCP results into `TextResult` objects. If structured results are unavailable but the endpoint returns text, that text is preserved as a single result. `region`, `safesearch`, `timelimit`, and `page` are accepted only for interface compatibility.
 
