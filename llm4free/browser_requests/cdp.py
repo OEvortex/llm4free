@@ -1,4 +1,3 @@
-
 import asyncio
 import base64
 import json
@@ -48,6 +47,7 @@ def _run_agent_browser(
     headless: bool = True,
     timeout: int = 120,
     use_npx: bool = False,
+    input_text: Optional[str] = None,
 ) -> str:
     """Run an ``agent-browser`` command and return its stdout.
 
@@ -82,6 +82,7 @@ def _run_agent_browser(
     try:
         proc = subprocess.run(
             cmd,
+            input=input_text,
             capture_output=True,
             text=True,
             timeout=timeout,
@@ -104,12 +105,19 @@ def _run_agent_browser_json(
     headless: bool = True,
     timeout: int = 120,
     use_npx: Optional[bool] = None,
+    input_text: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Run an ``agent-browser`` command that emits JSON and parse it."""
     if use_npx is None:
         use_npx = find_agent_browser().endswith("npx")
     out = _run_agent_browser(
-        session_id, *args, "--json", headless=headless, timeout=timeout, use_npx=use_npx
+        session_id,
+        *args,
+        "--json",
+        headless=headless,
+        timeout=timeout,
+        use_npx=use_npx,
+        input_text=input_text,
     )
     try:
         payload = json.loads(out)
@@ -163,8 +171,8 @@ class CDPSession:
         self.network_requests: List[dict] = []
         self.network_responses: List[dict] = []
 
-    async def _run(self, *args: str, timeout: int = 120) -> str:
-        """Run an agent-browser command on a thread executor."""
+    async def _run(self, *args: str, timeout: int = 120, input_text: Optional[str] = None) -> str:
+        """Run an agent-browser command, optionally providing stdin."""
         profile = ["--profile", self.user_data_dir] if self.user_data_dir else []
         args = tuple(profile) + args if profile else args
         return await asyncio.to_thread(
@@ -173,6 +181,7 @@ class CDPSession:
             *args,
             headless=self.headless,
             timeout=timeout,
+            input_text=input_text,
         )
 
     async def _run_json(self, *args: str, timeout: int = 120) -> Dict[str, Any]:
@@ -218,6 +227,27 @@ class CDPSession:
         """
         payload = await self._run_json(*_encode_js(expression), timeout=60)
         return (payload.get("data") or {}).get("result")
+
+    async def evaluate_js_stdin(self, expression: str) -> Any:
+        """Execute a large JavaScript expression through agent-browser stdin."""
+        payload = await self._run_json_stdin("eval", "--stdin", input_text=expression, timeout=120)
+        return (payload.get("data") or {}).get("result")
+
+    async def _run_json_stdin(
+        self, *args: str, input_text: str, timeout: int = 120
+    ) -> Dict[str, Any]:
+        profile = ["--profile", self.user_data_dir] if self.user_data_dir else []
+        args = tuple(profile) + args if profile else args
+        use_npx = find_agent_browser().endswith("npx")
+        return await asyncio.to_thread(
+            _run_agent_browser_json,
+            self.session_id,
+            *args,
+            headless=self.headless,
+            timeout=timeout,
+            use_npx=use_npx,
+            input_text=input_text,
+        )
 
     async def get_user_agent(self) -> str:
         """Retrieve the current browser user agent."""
@@ -323,9 +353,12 @@ class CDPSession:
         """
         deadline = time.time() + timeout
         while time.time() < deadline:
-            lines = await self.evaluate_js(
-                "(window.__llm4free_console||[]).slice(arguments[0]).join('\\n')"
-            ) or ""
+            lines = (
+                await self.evaluate_js(
+                    "(window.__llm4free_console||[]).slice(arguments[0]).join('\\n')"
+                )
+                or ""
+            )
             if not isinstance(lines, str):
                 lines = str(lines)
             for line in lines.split("\n"):

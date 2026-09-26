@@ -45,6 +45,7 @@ from llm4free.llm.freeaionline import FreeAIOnline
 from llm4free.llm.freeassist import FreeAssist
 from llm4free.llm.fuckicoding import FuckICoding
 from llm4free.llm.gemini import Gemini
+from llm4free.llm.glm import GLM
 from llm4free.llm.gptfree import GptFree
 from llm4free.llm.heckai import HeckAI
 from llm4free.llm.ibm import IBM
@@ -128,6 +129,7 @@ __all__ = [
     "ExaAI",
     "FreeAssist",
     "Gemini",
+    "GLM",
     "GptFree",
     "HeckAI",
     "IBM",

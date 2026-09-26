@@ -39,8 +39,11 @@ def _make_run_side_effect(
         captured.append({"cmd": cmd})
         # Decide what to return based on the subcommand.
         if "eval" in cmd:
-            b64 = cmd[cmd.index("-b") + 1]
-            _ = base64.b64decode(b64).decode("utf-8")  # ensure decodable
+            if "--stdin" in cmd:
+                _ = kwargs.get("input")
+            else:
+                b64 = cmd[cmd.index("-b") + 1]
+                _ = base64.b64decode(b64).decode("utf-8")  # ensure decodable
             return subprocess.CompletedProcess(
                 cmd, 0, stdout=_agent_browser_json({"result": eval_result}), stderr=""
             )
@@ -71,9 +74,7 @@ class TestFindAgentBrowser(unittest.TestCase):
 class TestSyncCDPSession(unittest.TestCase):
     def test_evaluate_js_and_cookies(self):
         cookies = [{"name": "cf_clearance", "value": "abc", "domain": ".example.com"}]
-        captured, fake_run = _make_run_side_effect(
-            eval_result="Mozilla/5.0", cookies=cookies
-        )
+        captured, fake_run = _make_run_side_effect(eval_result="Mozilla/5.0", cookies=cookies)
         with patch.object(cdp_module.subprocess, "run", fake_run):
             sess = SyncCDPSession(headless=False)
             sess.start_chrome()
@@ -107,6 +108,14 @@ class TestAsyncCDPSession(unittest.TestCase):
             self.assertEqual(result, 42)
             asyncio.run(sess.close())
 
+    def test_evaluate_large_js_stdin_async(self):
+        _, fake_run = _make_run_side_effect(eval_result="loaded")
+        with patch.object(cdp_module.subprocess, "run", fake_run):
+            sess = CDPSession()
+            result = asyncio.run(sess.evaluate_js_stdin("large expression"))
+            self.assertEqual(result, "loaded")
+            asyncio.run(sess.close())
+
     def test_get_cookies_async(self):
         cookies = [{"name": "a", "value": "1"}, {"name": "b", "value": "2"}]
         captured, fake_run = _make_run_side_effect(cookies=cookies)
@@ -130,9 +139,7 @@ class TestAsyncCDPSession(unittest.TestCase):
                     return subprocess.CompletedProcess(
                         cmd,
                         0,
-                        stdout=_agent_browser_json(
-                            {"result": "CF_CHUNK: hello"}
-                        ),
+                        stdout=_agent_browser_json({"result": "CF_CHUNK: hello"}),
                         stderr="",
                     )
                 if "console" in expr:  # install_console_capture

@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## [2026.9.20] - 2026-09-20
 
+### ✨ Added
+- **GLM (z.ai)** — Added an OpenAI-compatible provider for anonymous GLM chat at `chat.z.ai`, including live model discovery, signed browser-fingerprint requests, full-history messages, reasoning and web-search options, streaming/non-streaming responses, usage handling, and captcha retry support. Registered as `GLM` in `llm4free.llm` and covered by mocked protocol tests.
+
 ### 🐛 Fixed
 - **Brave Search** — Coalesced token-level streaming deltas into readable response chunks of up to 800 characters without splitting words at normal boundaries. Pending text is flushed before Deep Research status events and at the end of the stream, while `raw=True` continues to expose the original response lines for debugging.
 - **Brave Search tests** — Added regression coverage for formatted streaming, `last_response` consistency, raw-stream preservation, and long-response chunk boundaries.

@@ -29,6 +29,7 @@ The LLM4Free OpenAI-Compatible Providers module offers a standardized way to int
 
 Currently, the following providers are implemented with OpenAI-compatible interfaces:
 
+- GLM (z.ai) — anonymous GLM models with streaming and reasoning
 - DeepInfra
 - WiseCat
 - ExaAI
@@ -69,6 +70,49 @@ Currently, the following providers are implemented with OpenAI-compatible interf
 - QodoAI
 - Kimi
 - GptOss
+
+## GLM (z.ai)
+
+GLM provides anonymous access to the live z.ai model catalog through the standard OpenAI-compatible interface. No API key is required.
+
+```python
+from llm4free.llm import GLM
+
+client = GLM(timeout=60)
+response = client.chat.completions.create(
+    model="GLM-5.3-Flash",
+    messages=[{"role": "user", "content": "Explain Python generators"}],
+    reasoning_effort="none",
+)
+print(response.choices[0].message.content)
+```
+
+Streaming, reasoning output, and web search are supported:
+
+```python
+for chunk in client.chat.completions.create(
+    model="GLM-5.3",
+    messages=[{"role": "user", "content": "What changed in Python 3.13?"}],
+    stream=True,
+    reasoning_effort="high",
+    web_search=True,
+):
+    delta = chunk.choices[0].delta
+    if delta.reasoning_content:
+        print(delta.reasoning_content, end="", flush=True)
+    if delta.content:
+        print(delta.content, end="", flush=True)
+```
+
+The provider first requests normally. If z.ai returns `FRONTEND_CAPTCHA_REQUIRED`, captcha recovery launches the existing `agent-browser` backend automatically. Install it if it is not already available:
+
+```bash
+npm i -g agent-browser
+agent-browser install
+```
+
+> [!WARNING]
+> Anonymous GLM completion currently depends on z.ai's Aliyun captcha challenge. The protocol and retry flow are implemented, but the live challenge may reject automated/headless browser fingerprints with `verifyCode: F001`. In that case the provider raises a clear captcha error instead of returning an empty completion. The upstream gpt4free GLM snapshot currently has a separate CDP serialization failure before it can complete the same challenge.
 
 ## 💻 Usage Examples
 
