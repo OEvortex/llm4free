@@ -27,6 +27,7 @@ from .duckduckgo import (
 from .mojeek import Mojeek
 from .parallel import Parallel
 from .serpbase import SerpBase
+from .serply import Serply
 from .wikipedia import Wikipedia
 from .yahoo import (
     YahooImages,
@@ -44,6 +45,7 @@ ENGINES = {
         "mojeek": Mojeek,
         "parallel": Parallel,
         "serpbase": SerpBase,
+        "serply": Serply,
         "bing": BingTextSearch,
         "duckduckgo": DuckDuckGoTextSearch,
         "yahoo": YahooText,
@@ -95,6 +97,7 @@ __all__ = [
     "Mojeek",
     "Parallel",
     "SerpBase",
+    "Serply",
     "Wikipedia",
     "BingBase",
     "BingTextSearch",

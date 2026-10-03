@@ -13,6 +13,7 @@ from .duckduckgo_main import DuckDuckGoSearch
 from .engines.mojeek import Mojeek
 from .engines.parallel import Parallel
 from .engines.serpbase import SerpBase
+from .engines.serply import Serply
 from .engines.wikipedia import Wikipedia
 
 # Import result models
@@ -35,6 +36,7 @@ SEARCH_PROVIDERS: Dict[str, Type[BaseSearchEngine]] = cast(
         "Mojeek": Mojeek,
         "Parallel": Parallel,
         "SerpBase": SerpBase,
+        "Serply": Serply,
         "Wikipedia": Wikipedia,
         "YahooSearch": YahooSearch,
     },
@@ -66,6 +68,7 @@ __all__ = [
     "Mojeek",
     "Parallel",
     "SerpBase",
+    "Serply",
     "Wikipedia",
     # Registry
     "SEARCH_PROVIDERS",
