@@ -59,6 +59,9 @@ class Completions(BaseCompletions):
         # Format the messages using the format_prompt utility
         formatted_prompt = format_prompt(messages, add_special_tokens=True, do_continue=True)
 
+        # The API only accepts its own lowercase model slugs
+        resolved_model = self._client.resolve_model(model)
+
         # Get authentication token
         auth = self._client.get_auth()
         if not auth:
@@ -68,7 +71,7 @@ class Completions(BaseCompletions):
         data = {
             "text": formatted_prompt,
             "capcha": auth["token"],
-            "model": model,
+            "model": resolved_model,
             "session_id": auth["session_id"],
         }
 
@@ -79,11 +82,11 @@ class Completions(BaseCompletions):
         # Handle streaming response
         if stream:
             return self._handle_streaming_response(
-                request_id, created_time, model, data, timeout, proxies
+                request_id, created_time, resolved_model, data, timeout, proxies
             )
         else:
             return self._handle_non_streaming_response(
-                request_id, created_time, model, data, timeout, proxies
+                request_id, created_time, resolved_model, data, timeout, proxies
             )
 
     def _handle_streaming_response(
@@ -104,7 +107,7 @@ class Completions(BaseCompletions):
                 timeout=timeout or self._client.timeout,
                 impersonate="chrome110",
             )
-            resp.raise_for_status()
+            self._client.raise_on_error(resp)
 
             buffer = ""
             tag_start = "[model:"
@@ -207,7 +210,7 @@ class Completions(BaseCompletions):
                 timeout=timeout or self._client.timeout,
                 impersonate="chrome110",
             )
-            resp.raise_for_status()
+            self._client.raise_on_error(resp)
 
             text = resp.text
             # Remove [model: ...] tags
@@ -253,43 +256,48 @@ class Toolbaz(OpenAICompatibleProvider):
     """
 
     required_auth = False
+    default_model = "gemini-2.5-flash"
+
+    # These are the exact slugs accepted by writing.php. Display names such as
+    # "Gemini-3.6-Flash" are normalized by resolve_model().
     AVAILABLE_MODELS = [
         # ToolBaz
-        "ToolBaz V5",
-        "ToolBaz-v4.5-Fast",
-        "ToolBaz-v4",
+        "toolbaz-v5",
         # Google
-        "Gemini-3.6-Flash",
-        "Gemini-3-Flash",
-        "Gemini-2.5-Pro",
-        "Gemini-2.5-Flash",
+        "gemini-2.0-flash",
+        "gemini-2.5-flash",
+        "gemini-2.5-pro",
+        "gemini-3-flash",
+        "gemini-3.6-flash",
         # DeepSeek
-        "Deepseek-V3.1",
-        "DeepSeek-V3",
+        "deepseek-v3",
+        "deepseek-v3.1",
+        "deepseek-r1",
         # OpenAI
-        "GPT-5.2",
-        "GPT-5",
-        "GPT-OSS-120B",
-        "O3-Mini",
-        "GPT-4o (latest)",
+        "gpt-5",
+        "gpt-5.2",
+        "gpt-4o",
+        "gpt-oss-120b",
+        "o3-mini",
         # Anthropic
-        "Claude-Sonnet-4",
+        "claude-sonnet-4",
         # xAI
-        "Grok-4-Fast",
-        # Meta
-        "Llama-4-Maverick",
-        # Others (Unfiltered)
-        "L3-Euryale-v2.1",
-        "Midnight-Rose",
-        "Unfiltered_X (8x22b)",
+        "grok-4-fast",
+        # Others (unfiltered)
+        "midnight-rose",
     ]
+
+    MODEL_ALIASES = {
+        "gpt-4o (latest)": "gpt-4o",
+        "toolbaz-v4.5-fast": "toolbaz-v5",
+        "toolbaz-v4": "toolbaz-v5",
+    }
 
     def __init__(self, timeout: int = 30, proxies: dict = {}, browser: str = "chrome"):
         """
         Initialize the Toolbaz client.
 
         Args:
-            api_key: Not used but kept for compatibility with OpenAI interface
             timeout: Request timeout in seconds
             proxies: Proxy configuration for requests
             browser: Browser name for LitAgent to generate User-Agent
@@ -320,6 +328,31 @@ class Toolbaz(OpenAICompatibleProvider):
         """Generate a random string of specified length"""
         return "".join(random.choices(string.ascii_letters + string.digits, k=length))
 
+    def resolve_model(self, model: Optional[str]) -> str:
+        """Map a display name or alias to a slug accepted by the API."""
+        if not model or not model.strip():
+            return self.default_model
+
+        key = model.strip().lower()
+        if key in ("auto", "default"):
+            return self.default_model
+
+        alias = self.MODEL_ALIASES.get(key)
+        if alias:
+            return alias
+
+        slug = re.sub(r"[^a-z0-9.]+", "-", key).strip("-")
+        return slug or self.default_model
+
+    @staticmethod
+    def raise_on_error(resp: Any) -> None:
+        """Raise with the response body, which carries the real error code."""
+        if resp.status_code < 400:
+            return
+        detail = (resp.text or "").strip()[:500]
+        message = f"HTTP {resp.status_code}"
+        raise ValueError(f"{message}: {detail}" if detail else message)
+
     def generate_token(self):
         """Generate authentication token for Toolbaz API"""
         payload = {
@@ -348,6 +381,7 @@ class Toolbaz(OpenAICompatibleProvider):
             resp = self.session.post(
                 "https://data.toolbaz.com/token.php",
                 data=data,
+                timeout=self.timeout,
                 impersonate="chrome110",
             )
             resp.raise_for_status()
