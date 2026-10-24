@@ -28,42 +28,37 @@ LLM4Free can be deployed in multiple ways:
 
 ## Docker Setup
 
-### Pull Official Image
+> [!NOTE]
+> LLM4Free does **not** publish a pre-built Docker image. Build it yourself with the
+> `Dockerfile` in this repo, or serve the server without Docker:
+> `pip install "llm4free[api]"` then `llm4free-server`. See [docs/DOCKER.md](DOCKER.md).
+
+### Build and Run
 
 ```bash
-# Latest version
-docker pull oevortex/llm4free:latest
+# Build the image
+docker build -t llm4free-api .
 
-# Specific version
-docker pull oevortex/llm4free:2024.12.01
-
-# Latest slim version (smaller)
-docker pull oevortex/llm4free:slim
-```
-
-### Run Container
-
-```bash
-# Interactive mode
-docker run -it oevortex/llm4free:latest
+# Run container (interactive mode)
+docker run -it llm4free-api
 
 # With API key mounted
 docker run -it \
   -e OPENAI_API_KEY="your-api-key" \
-  oevortex/llm4free:latest
+  llm4free-api
 
 # With port forwarding (for API server)
 docker run -it \
   -p 8000:8000 \
   -e OPENAI_API_KEY="your-api-key" \
-  oevortex/llm4free:latest \
+  llm4free-api \
   llm4free-server
 ```
 
 ### Build Custom Image
 
 ```dockerfile
-FROM oevortex/llm4free:latest
+FROM llm4free-api:latest
 
 # Add custom requirements
 RUN pip install additional-package
@@ -93,7 +88,7 @@ version: '3.8'
 
 services:
   llm4free:
-    image: oevortex/llm4free:latest
+    build: .
     container_name: llm4free-app
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
@@ -106,7 +101,7 @@ services:
     tty: true
 
   llm4free-server:
-    image: oevortex/llm4free:latest
+    build: .
     container_name: llm4free-api
     command: llm4free-server --host 0.0.0.0 --port 8001
     environment:
@@ -139,15 +134,20 @@ docker-compose down
 
 ### With Authentication (Optional)
 
+> [!WARNING]
+> The current server implementation does **not** support API key authentication
+> (`auth_required = False` in `ServerConfig`). Authentication is disabled by default
+> and there is no `--api-key` CLI flag. This section is kept for reference; if you
+> need auth, put a reverse proxy (nginx/Caddy/Traefik) in front of the server.
+
 ```yaml
 services:
   llm4free-server:
-    image: oevortex/llm4free:latest
+    build: .
     command: >
       llm4free-server
       --host 0.0.0.0
       --port 8001
-      --api-key gsk_llm4free_prod_12345
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
     ports:
@@ -168,6 +168,12 @@ Your App → llm4free-server (OpenAI API) → Any LLM4Free Provider
 
 ### Start Server
 
+> [!NOTE]
+> The server reads configuration from **environment variables** only (prefixed with
+> `LLM4FREE_`). It does **not** read `llm4free_config.json`, `llm4free.yaml`, or
+> `.env` files directly. Set variables in your shell, `docker run -e`, or
+> `docker-compose.yml` `environment:` blocks.
+
 ```bash
 # Simple start
 llm4free-server
@@ -178,29 +184,25 @@ llm4free-server --host 0.0.0.0 --port 8001
 # With debug mode
 llm4free-server --debug
 
-# With API key requirement
-llm4free-server --api-key your-secret-key
+# With default provider
+llm4free-server --default-provider GROQ
 ```
 
 ### Configure Providers
 
-Create `llm4free_config.json`:
+Providers are discovered dynamically at startup. Set API keys as environment variables:
 
-```json
-{
-  "default_provider": "GROQ",
-  "providers": {
-    "GROQ": {
-      "api_key": "${GROQ_API_KEY}",
-      "model": "llama-3.1-70b-versatile"
-    },
-    "OpenAI": {
-      "api_key": "${OPENAI_API_KEY}",
-      "model": "gpt-4"
-    }
-  }
-}
+```bash
+export OPENAI_API_KEY="sk-your-openai-key"
+export GROQ_API_KEY="gsk_your-groq-key"
+export COHERE_API_KEY="co_your-cohere-key"
+export GEMINI_API_KEY="your-gemini-key"
 ```
+
+> [!NOTE]
+> There is no `llm4free_config.json` or `llm4free.yaml` file format read by the server.
+> All configuration is via environment variables documented in
+> [docs/openai-api-server.md](openai-api-server.md) and [docs/DOCKER.md](DOCKER.md).
 
 ### Use with OpenAI Client
 
@@ -250,7 +252,7 @@ curl http://localhost:8000/v1/models \
 #### Health Check
 
 ```bash
-curl http://localhost:8000/health
+curl http://localhost:8000/monitor/health
 ```
 
 ---
@@ -290,10 +292,6 @@ GEMINI_API_KEY=your-gemini-key
 LLM4FREE_HOST=0.0.0.0
 LLM4FREE_PORT=8000
 LLM4FREE_DEBUG=false
-
-# Timeout settings
-REQUEST_TIMEOUT=30
-STREAM_TIMEOUT=120
 ```
 
 Load with:
@@ -304,14 +302,26 @@ set -a
 source .env
 set +a
 
-# Or in Python
-from dotenv import load_dotenv
-load_dotenv()
+# Or in Docker Compose
+environment:
+  - OPENAI_API_KEY=${OPENAI_API_KEY}
+  - LLM4FREE_PORT=${LLM4FREE_PORT:-8000}
 ```
+
+> [!NOTE]
+> The server does **not** read `REQUEST_TIMEOUT`, `STREAM_TIMEOUT`, or any
+> `python-dotenv`-loaded variables. Only `LLM4FREE_*` prefixed variables (and a few
+> bare aliases like `PORT`, `DEBUG`, `BASE_URL`) are honored. See
+> [docs/DOCKER.md](DOCKER.md) for the full list.
 
 ### Configuration File
 
-Create `llm4free.yaml`:
+> [!NOTE]
+> The server does **not** read `llm4free.yaml`, `llm4free_config.json`, or any
+> YAML/JSON configuration file. All configuration is via environment variables.
+> This section is kept for reference only.
+
+Create `llm4free.yaml` (not currently read by the server):
 
 ```yaml
 server:
@@ -386,17 +396,16 @@ server {
 #### Health Checks
 
 ```bash
-# Docker
-docker run --healthcheck=CMD curl -f http://localhost:8000/health
+# Check if server is running
+curl http://localhost:8000/monitor/health
 
-# Kubernetes
-livenessProbe:
-  httpGet:
-    path: /health
-    port: 8000
-  initialDelaySeconds: 10
-  periodSeconds: 10
+# In Docker
+docker run --healthcheck=CMD curl -f http://localhost:8000/monitor/health
 ```
+
+> [!NOTE]
+> The health endpoint is `/monitor/health` (not `/health`). It returns
+> `{"status": "healthy", "service": "llm4free-api", "version": "0.2.0"}`.
 
 #### Logging
 
@@ -410,10 +419,10 @@ logging.basicConfig(
 
 #### Metrics
 
-```bash
-# Prometheus metrics endpoint
-curl http://localhost:8000/metrics
-```
+> [!NOTE]
+> The server does **not** expose a Prometheus `/metrics` endpoint. For metrics,
+> rely on your infrastructure's standard monitoring (Docker stats, Kubernetes
+> metrics server, or an external sidecar).
 
 ### 3. Performance
 
@@ -449,15 +458,15 @@ session.mount("https://", adapter)
 # docker-compose with multiple instances
 services:
   llm4free-1:
-    image: oevortex/llm4free:latest
+    build: .
     ports:
       - "8001:8000"
-  
+
   llm4free-2:
-    image: oevortex/llm4free:latest
+    build: .
     ports:
       - "8002:8000"
-  
+
   nginx:
     image: nginx:latest
     ports:
@@ -491,7 +500,7 @@ spec:
     spec:
       containers:
       - name: llm4free
-        image: oevortex/llm4free:latest
+        build: .
         ports:
         - containerPort: 8000
         
@@ -528,7 +537,7 @@ docker logs llm4free-api
 netstat -tulpn | grep 8000
 
 # Test locally
-curl http://localhost:8000/health
+curl http://localhost:8000/monitor/health
 ```
 
 ### "API key not found" errors
