@@ -20,6 +20,7 @@ from typing import (
     Dict,
     Generator,
     List,
+    Literal,
     Optional,
     Set,
     Tuple,
@@ -28,6 +29,7 @@ from typing import (
     TypeVar,
     Union,
     cast,
+    overload,
 )
 
 from llm4free.llm.base import (
@@ -631,6 +633,60 @@ class ClientCompletions(BaseCompletions):
             self._client.api_key,
             drop_auth=self._client.drop_auth_providers,
         )
+
+    @overload
+    def create(
+        self,
+        *,
+        model: str = "auto",
+        messages: List[Dict[str, Any]],
+        max_tokens: Optional[int] = None,
+        stream: Literal[True],
+        temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
+        tools: Optional[List[Union[Tool, Dict[str, Any]]]] = None,
+        tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
+        timeout: Optional[int] = None,
+        proxies: Optional[dict] = None,
+        provider: Optional[Type[OpenAICompatibleProvider]] = None,
+        **kwargs: Any,
+    ) -> Generator[ChatCompletionChunk, None, None]: ...
+
+    @overload
+    def create(
+        self,
+        *,
+        model: str = "auto",
+        messages: List[Dict[str, Any]],
+        max_tokens: Optional[int] = None,
+        stream: Literal[False] = False,
+        temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
+        tools: Optional[List[Union[Tool, Dict[str, Any]]]] = None,
+        tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
+        timeout: Optional[int] = None,
+        proxies: Optional[dict] = None,
+        provider: Optional[Type[OpenAICompatibleProvider]] = None,
+        **kwargs: Any,
+    ) -> ChatCompletion: ...
+
+    @overload
+    def create(
+        self,
+        *,
+        model: str = "auto",
+        messages: List[Dict[str, Any]],
+        max_tokens: Optional[int] = None,
+        stream: bool = False,
+        temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
+        tools: Optional[List[Union[Tool, Dict[str, Any]]]] = None,
+        tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
+        timeout: Optional[int] = None,
+        proxies: Optional[dict] = None,
+        provider: Optional[Type[OpenAICompatibleProvider]] = None,
+        **kwargs: Any,
+    ) -> Union[ChatCompletion, Generator[ChatCompletionChunk, None, None]]: ...
 
     def create(
         self,
@@ -1588,7 +1644,7 @@ if __name__ == "__main__":
             model="auto", messages=[{"role": "user", "content": "Hi"}]
         )
         if not inspect.isgenerator(response):
-            completion = cast(ChatCompletion, response)
+            completion = response
             if (
                 completion.choices
                 and completion.choices[0].message is not None

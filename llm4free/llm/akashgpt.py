@@ -1,7 +1,7 @@
 import json
 import time
 import uuid
-from typing import Any, Dict, Generator, List, Optional, Union
+from typing import Any, Dict, Generator, List, Literal, Optional, Union, overload
 
 from llm4free.browser_requests.cdp import CDPSession
 from llm4free.llm.base import (
@@ -35,7 +35,7 @@ class Completions(BaseCompletions):
         self,
         *,
         model: str,
-        messages: List[Dict[str, str]],
+        messages: List[Dict[str, Any]],
         max_tokens: Optional[int] = None,
         stream: bool = False,
         temperature: Optional[float] = None,
@@ -43,7 +43,7 @@ class Completions(BaseCompletions):
         timeout: Optional[int] = None,
         proxies: Optional[dict] = None,
         **kwargs: Any,
-    ) -> Union[ChatCompletion, Generator[ChatCompletionChunk, None, None]]:
+    ) -> Any:
         if model not in AVAILABLE_MODELS:
             model = AVAILABLE_MODELS[0]
         request_id = f"chatcmpl-{uuid.uuid4()}"
