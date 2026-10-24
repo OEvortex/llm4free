@@ -465,8 +465,8 @@ if __name__ == "__main__":
             messages=[{"role": "user", "content": "Write a short poem about machine learning"}],
             stream=True,
         ):
-            if chunk.choices[0].delta.content:  # type: ignore
-                print(chunk.choices[0].delta.content, end="", flush=True)  # type: ignore
+            if chunk.choices[0].delta.content:
+                print(chunk.choices[0].delta.content, end="", flush=True)
         print()
 
     except ValueError as e:

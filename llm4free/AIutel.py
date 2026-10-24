@@ -1,5 +1,6 @@
 import asyncio
 import functools
+import inspect
 import logging
 import time
 
@@ -52,7 +53,7 @@ def timeIt(func: Callable):
             _log_elapsed(getattr(func, "__name__", getattr(func, "__qualname__", str(func))), elapsed)
 
     try:
-        if asyncio.iscoroutinefunction(func):
+        if inspect.iscoroutinefunction(func):
             return async_wrapper
     except Exception:
         pass
@@ -114,7 +115,7 @@ def retry(retries: int = 3, delay: float = 1) -> Callable:
                 f"Function {func_name} failed after {retries} retries with no exception recorded"
             )
 
-        if asyncio.iscoroutinefunction(func):
+        if inspect.iscoroutinefunction(func):
             return async_wrapper
         return wrapper
 

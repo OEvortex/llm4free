@@ -161,7 +161,7 @@ class BaseCompletions(ABC):
         timeout: Optional[int] = None,
         proxies: Optional[dict] = None,
         **kwargs: Any,
-    ) -> Any:
+    ) -> Union[ChatCompletion, Generator[ChatCompletionChunk, None, None]]:
         """
         Abstract method to create chat completions with tool support.
 

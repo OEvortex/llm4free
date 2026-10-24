@@ -28,9 +28,9 @@ except ImportError:
         def assemble(*_args: Any, **_kwargs: Any) -> str:
             return ""
 
-    Console = _Dummy  # type: ignore
-    Panel = _Dummy  # type: ignore
-    Text = _Dummy  # type: ignore
+    Console = _Dummy
+    Panel = _Dummy
+    Text = _Dummy
     HAS_RICH = False
 
 PYPI_URL = "https://pypi.org/pypi/llm4free/json"

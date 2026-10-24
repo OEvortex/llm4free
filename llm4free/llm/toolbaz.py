@@ -377,7 +377,7 @@ if __name__ == "__main__":
     try:
         from llm4free.llm.utils import ChatCompletion
     except ImportError:
-        ChatCompletion = None  # type: ignore
+        ChatCompletion = None
 
     if ChatCompletion and isinstance(response, ChatCompletion):
         message = response.choices[0].message  # type: ignore
@@ -387,7 +387,7 @@ if __name__ == "__main__":
         # Streaming generator
         for chunk in response:
             if hasattr(chunk, "choices") and chunk.choices:
-                delta = getattr(chunk.choices[0], "delta", None)  # type: ignore
+                delta = getattr(chunk.choices[0], "delta", None)
                 if delta and getattr(delta, "content", None):
                     print(delta.content, end="", flush=True)
     print()

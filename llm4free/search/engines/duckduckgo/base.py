@@ -19,8 +19,8 @@ try:
     LXML_AVAILABLE = True
 except ImportError:
     LXML_AVAILABLE = False
-    LHTMLParser = None  # type: ignore
-    document_fromstring = None  # type: ignore
+    LHTMLParser = None
+    document_fromstring = None
 
 from llm4free.litagent import LitAgent
 

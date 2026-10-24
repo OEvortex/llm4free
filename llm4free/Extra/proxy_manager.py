@@ -176,8 +176,8 @@ class ProxyManager:
             k["proxies"] = k.get("proxies") or pm.get()
             original_curl_init(self, *a, **k)
 
-        requests.Session.__init__ = patched_req  # type: ignore
-        CurlSession.__init__ = patched_curl  # type: ignore
+        requests.Session.__init__ = patched_req
+        CurlSession.__init__ = patched_curl
 
     def monkey_patch(self) -> None:
         """Alias for patch() for backward compatibility."""
@@ -185,3 +185,13 @@ class ProxyManager:
 
 
 __all__ = ["ProxyManager"]
+
+if __name__ == "__main__":
+    pm = ProxyManager(auto_fetch=True, debug=True)
+    print("Initial proxies:", pm._proxies)
+    pm.monkey_patch()
+    # Example usage with requests
+    import requests
+
+    r = requests.get("http://httpbin.org/ip")
+    print(r.json())
