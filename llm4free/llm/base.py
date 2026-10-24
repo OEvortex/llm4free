@@ -58,7 +58,6 @@ class FunctionDefinition(TypedDict):
 @dataclass
 class Tool:
     """Tool class that can be passed to the provider"""
-
     name: str
     description: str
     parameters: Dict[str, Dict[str, Any]]
@@ -92,6 +91,13 @@ class Tool:
             return f"Error executing tool '{self.name}': {str(e)}"
 
 
+# Tool definitions may be OpenAI-style dicts, ``Tool`` objects, or a mix.
+# A ``list[dict[str, Any]]`` is not assignable to
+# ``list[Union[Tool, dict[str, Any]]]`` because lists are invariant, so the
+# public parameter stays loose and each entry is validated at runtime.
+ToolList = Optional[List[Any]]
+
+
 class BaseCompletions(ABC):
     @overload
     def create(
@@ -103,7 +109,7 @@ class BaseCompletions(ABC):
         stream: Literal[True],
         temperature: Optional[float] = None,
         top_p: Optional[float] = None,
-        tools: Optional[List[Union[Tool, Dict[str, Any]]]] = None,
+        tools: ToolList = None,
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         timeout: Optional[int] = None,
         proxies: Optional[dict] = None,
@@ -120,7 +126,7 @@ class BaseCompletions(ABC):
         stream: Literal[False] = False,
         temperature: Optional[float] = None,
         top_p: Optional[float] = None,
-        tools: Optional[List[Union[Tool, Dict[str, Any]]]] = None,
+        tools: ToolList = None,
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         timeout: Optional[int] = None,
         proxies: Optional[dict] = None,
@@ -137,7 +143,7 @@ class BaseCompletions(ABC):
         stream: bool = False,
         temperature: Optional[float] = None,
         top_p: Optional[float] = None,
-        tools: Optional[List[Union[Tool, Dict[str, Any]]]] = None,
+        tools: ToolList = None,
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         timeout: Optional[int] = None,
         proxies: Optional[dict] = None,
@@ -154,7 +160,7 @@ class BaseCompletions(ABC):
         stream: bool = False,
         temperature: Optional[float] = None,
         top_p: Optional[float] = None,
-        tools: Optional[List[Union[Tool, Dict[str, Any]]]] = None,  # Support for tool definitions
+        tools: ToolList = None,  # Support for tool definitions
         tool_choice: Optional[
             Union[str, Dict[str, Any]]
         ] = None,  # Support for tool_choice parameter
@@ -260,6 +266,14 @@ class BaseCompletions(ABC):
         r"<invoke>\s*<tool_name>(.*?)</tool_name>\s*<parameters>(.*?)</parameters>\s*</invoke>",
         re.DOTALL,
     )
+    # Lenient fallbacks for models that wrap the block or mismatch closing tags
+    _TOOL_INVOKE_BLOCK_RE = re.compile(r"<invoke>(.*?)(?:</invoke>|$)", re.DOTALL)
+    _TOOL_NAME_RE = re.compile(r"<tool_name>(.*?)</tool_name>", re.DOTALL)
+    _TOOL_PARAMS_RE = re.compile(
+        r"<parameters>(.*?)(?:</parameters>|</tool_name>|</invoke>|$)", re.DOTALL
+    )
+    _TOOL_CALL_JSON_RE = re.compile(r"<tool_call>\s*(\{.*?\})\s*</tool_call>", re.DOTALL)
+    _TRAILING_TAG_RE = re.compile(r"</[^>]+>\s*$")
 
     def format_tools_for_prompt(self, tools: Optional[List[Tool]] = None) -> str:
         """Format tool definitions as an XML instruction block for the prompt.
@@ -285,7 +299,12 @@ class BaseCompletions(ABC):
             "",
             "Where `$JSON_ARGUMENTS` is a valid JSON object of arguments.",
             "Output one `<invoke>...</invoke>` block per tool call.",
+            "Emit the block directly: do not wrap it in `<tool_call>`, markdown",
+            "fences, or any other tags, and do not add commentary inside it.",
             "If no tool is needed, respond normally without any `<invoke>` blocks.",
+            "",
+            "Example:",
+            '<invoke><tool_name>TOOL_NAME</tool_name><parameters>{"argument": "value"}</parameters></invoke>',
             "",
             "Here are the available tools:",
             "",
@@ -309,22 +328,70 @@ class BaseCompletions(ABC):
         return "\n".join(parts)
 
     @staticmethod
+    def _parse_tool_arguments(raw: str) -> Optional[Dict[str, Any]]:
+        """Parse tool arguments, tolerating tags and prose around the JSON."""
+        raw = BaseCompletions._TRAILING_TAG_RE.sub("", raw.strip()).strip()
+        if not raw:
+            return {}
+
+        candidates = [raw]
+        start, end = raw.find("{"), raw.rfind("}")
+        if start != -1 and end > start:
+            candidates.append(raw[start : end + 1])
+
+        for candidate in candidates:
+            try:
+                parsed = json.loads(candidate)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(parsed, dict):
+                return parsed
+        return None
+
+    @staticmethod
     def extract_tool_calls(text: str) -> Optional[List[Dict[str, Any]]]:
-        """Parse ``<invoke>`` XML blocks from LLM response text.
+        """Parse tool calls from LLM response text.
+
+        Accepts the canonical ``<invoke>`` XML format plus variants some models
+        emit: wrapped in ``<tool_call>`` tags, mismatched closing tags, or a
+        ``<tool_call>{"name": ..., "arguments": {...}}</tool_call>`` JSON block.
 
         Returns:
             A list of ``{"name": ..., "arguments": ...}`` dicts, or ``None``
-            when the response contains no tool calls.
+            when the response contains no usable tool calls.
         """
         calls: List[Dict[str, Any]] = []
-        for match in BaseCompletions._TOOL_INVOKE_RE.finditer(text):
-            name = match.group(1).strip()
-            raw_args = match.group(2).strip()
-            try:
-                args = json.loads(raw_args) if raw_args else {}
-            except json.JSONDecodeError:
-                args = {}
-            calls.append({"name": name, "arguments": args})
+
+        for block in BaseCompletions._TOOL_INVOKE_BLOCK_RE.findall(text):
+            name_match = BaseCompletions._TOOL_NAME_RE.search(block)
+            if not name_match:
+                continue
+            args_match = BaseCompletions._TOOL_PARAMS_RE.search(block)
+            raw_args = args_match.group(1) if args_match else ""
+            args = BaseCompletions._parse_tool_arguments(raw_args)
+            if args is None:
+                continue
+            calls.append({"name": name_match.group(1).strip(), "arguments": args})
+
+        if not calls:
+            for raw_json in BaseCompletions._TOOL_CALL_JSON_RE.findall(text):
+                try:
+                    payload = json.loads(raw_json)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(payload, dict):
+                    continue
+                function = payload.get("function", payload)
+                name = function.get("name")
+                if not name:
+                    continue
+                args = function.get("arguments", {})
+                if isinstance(args, str):
+                    args = BaseCompletions._parse_tool_arguments(args)
+                if not isinstance(args, dict):
+                    continue
+                calls.append({"name": name, "arguments": args})
+
         return calls or None
 
     @staticmethod
@@ -340,13 +407,74 @@ class BaseCompletions(ABC):
             )
         return "\n".join(parts)
 
+    @staticmethod
+    def _format_tool_call_for_prompt(call: Any) -> str:
+        """Render a tool call (dict or ToolCall) in the XML prompt format."""
+        if isinstance(call, dict):
+            function = call.get("function", {})
+            name = function.get("name", "unknown")
+            arguments = function.get("arguments", "{}")
+        else:
+            function = getattr(call, "function", None)
+            name = getattr(function, "name", "unknown")
+            arguments = getattr(function, "arguments", "{}")
+        return (
+            f"<invoke><tool_name>{name}</tool_name>"
+            f"<parameters>{arguments}</parameters></invoke>"
+        )
+
+    @classmethod
+    def _normalize_messages_for_prompt(
+        cls, messages: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """Convert OpenAI tool messages into plain text for non-native providers.
+
+        Providers on the XML tool loop often ignore ``role: "tool"`` messages
+        and assistant ``tool_calls`` fields. Rendering both as text keeps the
+        tool result visible to the model on the follow-up turn.
+        """
+        normalized: List[Dict[str, Any]] = []
+
+        for message in messages:
+            role = message.get("role")
+
+            if role == "tool":
+                call_id = message.get("tool_call_id", "unknown")
+                content = message.get("content", "")
+                normalized.append(
+                    {
+                        "role": "user",
+                        "content": f"Tool result (call_id={call_id}):\n{content}",
+                    }
+                )
+                continue
+
+            tool_calls = message.get("tool_calls")
+            if role == "assistant" and tool_calls:
+                call_text = "\n".join(
+                    cls._format_tool_call_for_prompt(call) for call in tool_calls
+                )
+                content = message.get("content") or ""
+                normalized_message = {
+                    key: value for key, value in message.items() if key != "tool_calls"
+                }
+                normalized_message["content"] = (
+                    f"{content}\n{call_text}".strip() if content else call_text
+                )
+                normalized.append(normalized_message)
+                continue
+
+            normalized.append(message)
+
+        return normalized
+
     def _run_non_native_tool_loop(
         self,
         original_create: Callable[..., Any],
         *,
         model: str,
         messages: List[Dict[str, Any]],
-        tools: Optional[List[Union[Tool, Dict[str, Any]]]] = None,
+        tools: ToolList = None,
         stream: bool = False,
         **kwargs: Any,
     ) -> Any:
@@ -372,16 +500,28 @@ class BaseCompletions(ABC):
         for t in tools or []:
             if isinstance(t, Tool):
                 tool_objects.append(t)
-            elif isinstance(t, dict):
-                fn = t.get("function", t)
-                tool_objects.append(
-                    Tool(
-                        name=fn.get("name", "unknown"),
-                        description=fn.get("description", ""),
-                        parameters=fn.get("parameters", {}).get("properties", {}),
-                        required_params=fn.get("parameters", {}).get("required"),
-                    )
+                continue
+
+            if not isinstance(t, dict):
+                # Accept Tool dataclasses from llm4free.AIbase (a separate
+                # class) and any object exposing an OpenAI-style to_dict().
+                to_dict = getattr(t, "to_dict", None)
+                if not callable(to_dict):
+                    ic.configureOutput(prefix="WARNING| ")
+                    ic(f"Skipping invalid tool type: {type(t)}")
+                    continue
+                t = to_dict()
+
+            fn = t.get("function", t)
+            parameters = fn.get("parameters") or {}
+            tool_objects.append(
+                Tool(
+                    name=fn.get("name", "unknown"),
+                    description=fn.get("description", ""),
+                    parameters=parameters.get("properties", {}),
+                    required_params=parameters.get("required"),
                 )
+            )
 
         if stream:
             ic("stream=True is ignored in non-native tool loop")
@@ -389,10 +529,9 @@ class BaseCompletions(ABC):
 
         # Inject tool definitions into the first system message (or prepend one)
         tool_block = self.format_tools_for_prompt(tool_objects)
-        working_messages = list(messages)
+        working_messages = self._normalize_messages_for_prompt(messages)
         if tool_block:
             if working_messages and working_messages[0].get("role") == "system":
-                working_messages = list(working_messages)
                 working_messages[0] = {
                     **working_messages[0],
                     "content": tool_block + "\n\n" + (working_messages[0].get("content") or ""),
@@ -404,7 +543,6 @@ class BaseCompletions(ABC):
             model=model,
             messages=working_messages,
             stream=False,
-            tools=None,
             **kwargs,
         )
 
@@ -488,6 +626,10 @@ class OpenAICompatibleProvider(ABC):
         @wraps(orig_init)
         def _non_native_init(self, *args: Any, **kwargs: Any) -> None:
             orig_init(self, *args, **kwargs)
+            # Subclasses often override __init__ without calling super(), so
+            # ensure registered tools never fall back to the shared class dict.
+            if "available_tools" not in self.__dict__:
+                self.available_tools = {}
             completions = getattr(getattr(self, "chat", None), "completions", None)
             if completions is None:
                 return
@@ -496,7 +638,13 @@ class OpenAICompatibleProvider(ABC):
             @wraps(original_create)
             def _tool_aware_create(*a: Any, **kw: Any) -> Any:
                 tools = kw.get("tools")
-                if tools is not None:
+                if tools is None:
+                    # Match AIbase.Provider: registered tools are implicitly
+                    # available even when the request does not repeat them.
+                    registered = getattr(self, "available_tools", None)
+                    if registered:
+                        tools = list(registered.values())
+                if tools:
                     kw.pop("tools", None)
                     # tool_choice is irrelevant in the XML loop
                     kw.pop("tool_choice", None)

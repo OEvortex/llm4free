@@ -31,6 +31,7 @@ from llm4free.llm.base import (
     OpenAICompatibleProvider,
     SimpleModelList,
     Tool,
+    ToolList,
 )
 from llm4free.llm.utils import (
     ChatCompletion,
@@ -489,7 +490,7 @@ class Completions(BaseCompletions):
         stream: bool = False,
         temperature: Optional[float] = None,
         top_p: Optional[float] = None,
-        tools: Optional[List[Union[Tool, Dict[str, Any]]]] = None,
+        tools: ToolList = None,
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         timeout: Optional[int] = None,
         proxies: Optional[dict] = None,

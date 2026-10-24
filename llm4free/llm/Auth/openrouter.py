@@ -20,6 +20,7 @@ from llm4free.llm.utils import (
     Choice,
     ChoiceDelta,
     CompletionUsage,
+    ToolCall,
     count_tokens,
 )
 
@@ -205,8 +206,16 @@ class Completions(BaseCompletions):
             choices = []
             for choice_d in choices_data:
                 message_d = choice_d.get("message", {})
+                raw_tool_calls = message_d.get("tool_calls")
+                tool_calls = (
+                    [ToolCall.model_validate(call) for call in raw_tool_calls]
+                    if raw_tool_calls
+                    else None
+                )
                 message = ChatCompletionMessage(
-                    role=message_d.get("role", "assistant"), content=message_d.get("content", "")
+                    role=message_d.get("role", "assistant"),
+                    content=message_d.get("content"),
+                    tool_calls=tool_calls,
                 )
                 choice = Choice(
                     index=choice_d.get("index", 0),

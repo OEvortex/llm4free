@@ -37,6 +37,7 @@ from llm4free.llm.base import (
     BaseCompletions,
     OpenAICompatibleProvider,
     Tool,
+    ToolList,
 )
 from llm4free.llm.utils import (
     ChatCompletion,
@@ -494,21 +495,23 @@ def _build_fallback_queue(
 
 
 def _is_valid_chat_completion(response: Any) -> TypeGuard[ChatCompletion]:
-    """Type guard that validates a ChatCompletion has valid content.
+    """Type guard that validates a ChatCompletion has usable output.
 
-    This function performs runtime validation and also serves as a type
-    narrowing function for static type checkers. After this function
-    returns True, type checkers understand that response.choices[0].message
-    is not None and response.choices[0].message.content is not None.
+    A response is valid when it contains either non-empty text content or
+    at least one tool call. Tool-call responses legitimately have
+    ``content=None``, so they must not be treated as empty completions.
     """
-    return bool(
-        response
-        and hasattr(response, "choices")
-        and response.choices
-        and response.choices[0].message is not None
-        and response.choices[0].message.content is not None
-        and response.choices[0].message.content.strip()
-    )
+    if not (response and hasattr(response, "choices") and response.choices):
+        return False
+
+    message = response.choices[0].message
+    if message is None:
+        return False
+
+    if message.tool_calls:
+        return True
+
+    return bool(message.content and message.content.strip())
 
 
 def _chain_stream_response(
@@ -643,7 +646,7 @@ class ClientCompletions(BaseCompletions):
         stream: Literal[True],
         temperature: Optional[float] = None,
         top_p: Optional[float] = None,
-        tools: Optional[List[Union[Tool, Dict[str, Any]]]] = None,
+        tools: ToolList = None,
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         timeout: Optional[int] = None,
         proxies: Optional[dict] = None,
@@ -661,7 +664,7 @@ class ClientCompletions(BaseCompletions):
         stream: Literal[False] = False,
         temperature: Optional[float] = None,
         top_p: Optional[float] = None,
-        tools: Optional[List[Union[Tool, Dict[str, Any]]]] = None,
+        tools: ToolList = None,
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         timeout: Optional[int] = None,
         proxies: Optional[dict] = None,
@@ -679,7 +682,7 @@ class ClientCompletions(BaseCompletions):
         stream: bool = False,
         temperature: Optional[float] = None,
         top_p: Optional[float] = None,
-        tools: Optional[List[Union[Tool, Dict[str, Any]]]] = None,
+        tools: ToolList = None,
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         timeout: Optional[int] = None,
         proxies: Optional[dict] = None,
@@ -696,7 +699,7 @@ class ClientCompletions(BaseCompletions):
         stream: bool = False,
         temperature: Optional[float] = None,
         top_p: Optional[float] = None,
-        tools: Optional[List[Union[Tool, Dict[str, Any]]]] = None,
+        tools: ToolList = None,
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         timeout: Optional[int] = None,
         proxies: Optional[dict] = None,
@@ -799,7 +802,7 @@ class ClientCompletions(BaseCompletions):
                         )
                     except StopIteration:
                         pass
-                    except (RuntimeError, ValueError) as exc:
+                    except Exception as exc:
                         ic("Stream error from %s: %s", resolved_provider.__name__, exc)
                 else:
                     if not inspect.isgenerator(response):
@@ -812,9 +815,10 @@ class ClientCompletions(BaseCompletions):
                                 )
                             return completion_response
                         raise ValueError(
-                            f"Provider {resolved_provider.__name__} returned empty content"
+                            f"Provider {resolved_provider.__name__} returned empty "
+                            "content and no tool calls"
                         )
-            except (RuntimeError, ValueError, TypeError) as exc:
+            except Exception as exc:
                 ic("Provider %s failed: %s", resolved_provider.__name__, exc)
 
         all_available = self._get_available_providers()
@@ -857,7 +861,7 @@ class ClientCompletions(BaseCompletions):
                         if self._client.print_provider_info:
                             _print_provider_selection(p_name, p_model, fallback=True)
                         return completion_response
-                    errors.append(f"{p_name}: Returned empty response.")
+                    errors.append(f"{p_name}: Returned empty response with no tool calls.")
                     continue
             except Exception as e:
                 errors.append(f"{p_name}: {str(e)}")
