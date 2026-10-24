@@ -35,6 +35,7 @@ from llm4free.llm.base import (
     ToolDefinition,
 )
 from llm4free.llm.chatgpt import ChatGPT, ChatGPTReversed
+from llm4free.llm.chatbotchatapp import ChatBotChatApp
 
 # Provider implementations
 from llm4free.llm.gemini import Gemini
@@ -107,6 +108,7 @@ __all__ = [
     "Cerebras",
     "ChatGPT",
     "ChatGPTReversed",
+    "ChatBotChatApp",
     "DeepInfra",
 
 
