@@ -1,9 +1,19 @@
 """
 Requests package for llm4free.
 
-Exposes a lightweight Chrome DevTools Protocol (CDP) client plus a convenience
-helper, :func:`get_args_from_cdp`, that returns browser-derived cookies,
-user-agent and headers ready to pass into a ``curl_cffi`` session.
+Exposes a modular, engine-agnostic Chrome DevTools Protocol (CDP) client
+plus a convenience helper, :func:`get_args_from_cdp`, that returns
+browser-derived cookies, user-agent and headers ready to pass into a
+``curl_cffi`` session.
+
+Engines (``CDPSession(engine=...)`` or ``LLM4FREE_BROWSER_ENGINE``):
+
+* ``agent-browser`` — Chrome via the agent-browser CLI (default; the
+  shipped stealth plugin clears Cloudflare Turnstile headless);
+* ``lightpanda`` — ~40 MB Zig headless engine driven by our own zero-dep
+  CDP client over one persistent WebSocket (fastest, lowest RAM);
+* ``chrome`` — real stealth Chrome driven by our own CDP client;
+* ``native`` — lightpanda when available (headless), else chrome.
 """
 
 import asyncio
@@ -13,11 +23,16 @@ from typing import Any, Dict, Optional
 
 try:
     from .cdp import CDPSession, SyncCDPSession
+    from .native_cdp import CDPClient, CDPError
+    from .backends.agentbrowser import find_agent_browser
+    from .browserproc import find_chrome_binary, find_lightpanda_path, launch_lightpanda
 
     has_cdp = True
 except ImportError:  # pragma: no cover - cdp is always present in this package
     CDPSession = None
     SyncCDPSession = None
+    CDPClient = None
+    CDPError = None
     has_cdp = False
 
 logger = logging.getLogger(__name__)
@@ -51,7 +66,9 @@ async def get_args_from_cdp(
     if not has_cdp:
         raise RuntimeError("CDP client is not available")
 
-    session = CDPSession(user_data_dir=user_data_dir, headless=headless)
+    session_cls = CDPSession
+    assert session_cls is not None  # implied by has_cdp
+    session = session_cls(user_data_dir=user_data_dir, headless=headless)
     try:
         await session.start()
         await session.navigate(url)
@@ -87,6 +104,12 @@ async def get_args_from_cdp(
 __all__ = [
     "CDPSession",
     "SyncCDPSession",
+    "CDPClient",
+    "CDPError",
     "has_cdp",
     "get_args_from_cdp",
+    "find_agent_browser",
+    "find_chrome_binary",
+    "find_lightpanda_path",
+    "launch_lightpanda",
 ]

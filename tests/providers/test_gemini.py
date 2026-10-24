@@ -10,10 +10,9 @@ import os
 
 import pytest
 
-# Gemini provider (GEMINI class) lives in llm4free.Bard but uses
-# a legacy interface (ask/get_message) that is incompatible with the
-# current OpenAI-compatible provider base.  Skip the entire module
-# until the tests are rewritten against the current interface.
+# Gemini provider now lives in llm4free.llm.gemini with an
+# OpenAI-compatible interface.  The legacy ask/get_message tests are
+# skipped until they are rewritten against the new interface.
 
 pytestmark = pytest.mark.skip(reason="Gemini provider uses legacy interface; tests need rewriting")
 
