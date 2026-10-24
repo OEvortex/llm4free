@@ -44,7 +44,7 @@ class Completions(BaseCompletions):
         self,
         *,
         model: str = "openai/gpt-4o-mini",
-        messages: List[Dict[str, str]],
+        messages: List[Dict[str, Any]],
         stream: bool = False,
         temperature: Optional[float] = None,
         top_p: Optional[float] = None,
@@ -59,14 +59,11 @@ class Completions(BaseCompletions):
         request_id = f"chatcmpl-{uuid.uuid4()}"
         created_time = int(time.time())
 
-        # Use format_prompt from utils
-        prompt = format_prompt(messages)
-
         if stream:
-            return self._create_stream(request_id, created_time, model, prompt, timeout, proxies)
+            return self._create_stream(request_id, created_time, model, messages, timeout, proxies)
         else:
             return self._create_non_stream(
-                request_id, created_time, model, prompt, timeout, proxies
+                request_id, created_time, model, messages, timeout, proxies
             )
 
     def _create_stream(
@@ -74,25 +71,31 @@ class Completions(BaseCompletions):
         request_id: str,
         created_time: int,
         model: str,
-        prompt: str,
+        messages: List[Dict[str, Any]],
         timeout: Optional[int] = None,
         proxies: Optional[Dict[str, str]] = None,
     ) -> Generator[ChatCompletionChunk, None, None]:
         """Implementation for streaming chat completions."""
         try:
             # Initialize session to get CSRF token
-            self._client._init_session()
+            self._client._init_session(proxies=proxies)
+
+            chat_messages = []
+            for m in messages:
+                role = m.get("role", "user")
+                content = str(m.get("content", ""))
+                chat_messages.append(
+                    {
+                        "id": generate_random_id(),
+                        "role": role,
+                        "parts": [{"type": "text", "text": content}],
+                    }
+                )
 
             payload = {
                 "modelId": model,
                 "id": generate_random_id(),
-                "messages": [
-                    {
-                        "id": generate_random_id(),
-                        "role": "user",
-                        "parts": [{"type": "text", "text": prompt}],
-                    }
-                ],
+                "messages": chat_messages,
                 "trigger": "submit-message",
             }
 
@@ -199,7 +202,7 @@ class Completions(BaseCompletions):
         request_id: str,
         created_time: int,
         model: str,
-        prompt: str,
+        messages: List[Dict[str, Any]],
         timeout: Optional[int] = None,
         proxies: Optional[Dict[str, str]] = None,
     ) -> ChatCompletion:
@@ -207,7 +210,7 @@ class Completions(BaseCompletions):
         full_content = ""
         full_reasoning = ""
 
-        for chunk in self._create_stream(request_id, created_time, model, prompt, timeout, proxies):
+        for chunk in self._create_stream(request_id, created_time, model, messages, timeout, proxies):
             delta = chunk.choices[0].delta
 
             # Accumulate reasoning content
@@ -225,10 +228,12 @@ class Completions(BaseCompletions):
             reasoning=full_reasoning if full_reasoning else None,
         )
         choice = Choice(index=0, message=message, finish_reason="stop")
+        prompt_words = sum(len(str(m.get("content", "")).split()) for m in messages)
+        completion_words = len(full_content.split())
         usage = CompletionUsage(
-            prompt_tokens=len(prompt.split()),
-            completion_tokens=len(full_content.split()),
-            total_tokens=len(prompt.split()) + len(full_content.split()),
+            prompt_tokens=prompt_words,
+            completion_tokens=completion_words,
+            total_tokens=prompt_words + completion_words,
         )
 
         return ChatCompletion(
@@ -257,7 +262,6 @@ class TypliAI(OpenAICompatibleProvider):
         "openai/gpt-5.6-sol-pro",
         "openai/gpt-5.6-luna-pro",
         "google/gemini-3.1-flash-lite",
-        "google/gemini-2.5-flash",
         "google/gemini-3.8-flash-pro",
         "google/gemini-3.1-pro",
         "anthropic/claude-fable-5-1-pro",
@@ -269,13 +273,9 @@ class TypliAI(OpenAICompatibleProvider):
         "anthropic/claude-sonnet-4-6-pro",
         "xai/grok-4.6-pro",
         "xai/grok-4.5-pro",
-        "xai/grok-4.3",
         "deepseek/deepseek-v4-1-flash-pro",
-        "moonshotai/kimi-k2.5",
-        "moonshotai/kimi-k2.6",
         "moonshotai/kimi-k3-pro",
         "alibaba/qwen-3.8-max-pro",
-        "alibaba/qwen-3-235b",
     ]
 
     def __init__(self, timeout: int = 60, proxies: Optional[dict] = None, browser: str = "chrome"):
@@ -317,7 +317,7 @@ class TypliAI(OpenAICompatibleProvider):
 
         self.chat = Chat(self)
 
-    def _init_session(self) -> None:
+    def _init_session(self, proxies: Optional[Dict[str, str]] = None) -> None:
         """Initialize session by visiting the page to get CSRF token and cookies."""
         try:
             # Visit the page first to get CSRF token cookie
@@ -326,6 +326,7 @@ class TypliAI(OpenAICompatibleProvider):
                 headers=self.headers,
                 timeout=self.timeout,
                 impersonate="chrome120",
+                proxies=proxies or self.proxies,  # ty:ignore[invalid-argument-type]
             )
             # Extract CSRF token from cookies and decode it
             csrf_token = self.session.cookies.get("csrf-token")
@@ -349,10 +350,12 @@ if __name__ == "__main__":
     client = TypliAI()
     print(f"Available models: {client.models.list()}")
 
+    test_model = "deepseek/deepseek-v4-1-flash-pro"
+
     # Test non-streaming with reasoning model
     print("\n=== Testing Non-Streaming with Reasoning Model ===")
     response = client.chat.completions.create(
-        model="moonshotai/kimi-k2.5",
+        model=test_model,
         messages=[{"role": "user", "content": "Hello! How are you?"}],
         stream=False,
     )
@@ -368,7 +371,7 @@ if __name__ == "__main__":
     # Test streaming with reasoning model
     print("\n=== Testing Streaming with Reasoning Model ===")
     stream_resp = client.chat.completions.create(
-        model="moonshotai/kimi-k2.5",
+        model=test_model,
         messages=[{"role": "user", "content": "Hello!"}],
         stream=True,
     )

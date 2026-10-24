@@ -47,8 +47,16 @@ Streaming/non-streaming exposure matches the OpenAI client surface:
     print(resp.choices[0].message.content)
 
 Requirements: ``npm i -g agent-browser && agent-browser install``.
-Cloudflare protects pi.ai; if a challenge doesn't clear in a headless
-browser pass ``headless=False`` (headed windows clear it reliably).
+
+Headless Cloudflare Turnstile: agent-browser is launched with the
+*shipped* ``launch.mutate`` stealth plugin
+(``llm4free/browser_requests/agent_browser_stealth_plugin.py``, registered
+automatically via ``AGENT_BROWSER_PLUGINS``) which applies
+``--disable-blink-features=AutomationControlled``, a clean
+(non-``HeadlessChrome``) user agent, and a ``navigator.webdriver`` mask
+init script. The challenge then resolves by itself in seconds, fully
+headless. Edge cases can fall back to ``stealth_chrome=True`` (connect to
+a real Chrome with anti-automation flags) or ``headless=False``.
 
 Bugs fixed relative to the previous curl_cffi implementation:
 
@@ -347,9 +355,23 @@ class _BrowserBackend:
         headless: bool = True,
         user_data_dir: Optional[str] = None,
         challenge_timeout: float = 60.0,
-        stealth_chrome: bool = True,
+        stealth_chrome: bool = False,
         port: Optional[int] = None,
     ) -> None:
+        """Initialize the browser backend.
+
+        Args:
+            headless: Headless default (``True``) works fine: agent-browser
+                launches with the shipped ``launch.mutate`` stealth plugin
+                (see ``agent_browser_stealth_plugin.py``) which clears the
+                Cloudflare Turnstile challenge without any real Chrome.
+            user_data_dir: Optional persistent browser profile name.
+            challenge_timeout: Seconds to wait for the challenge to clear.
+            stealth_chrome: Fallback: instead connect agent-browser to a
+                real Chrome launched with anti-automation flags (only
+                needed if the plugin route is unavailable).
+            port: CDP port for the ``stealth_chrome`` fallback.
+        """
         self.headless = headless
         self.user_data_dir = user_data_dir
         self.challenge_timeout = challenge_timeout
@@ -413,9 +435,14 @@ class _BrowserBackend:
 
     # ── coroutines run on the worker loop ─────────────────────────
 
-    async def _prepare_page(self) -> None:
+    async def _prepare_page(self) -> int:
         """Navigate to pi.ai/talk, clear any Cloudflare interstitial, and
-        install a guarded ``console.log`` capture buffer."""
+        install a guarded ``console.log`` capture buffer.
+
+        Returns:
+            The console-buffer cursor snapshot (0 lines consumed so far) to
+            hand to :meth:`start_conversation` / :meth:`stream_chat`.
+        """
         if self.session is None:
             raise RuntimeError("PiAI browser worker is not running")
         try:
@@ -424,7 +451,11 @@ class _BrowserBackend:
             logger.warning("PiAI: navigate failed for %s: %s", _PI_TALK_URL, e)
 
         # Wait out the Cloudflare interstitial ("Just a moment...").
+        # With the stealth plugin active the challenge resolves by itself
+        # within seconds, so clicking starts only as a late fallback —
+        # premature clicks interrupt the in-flight solve.
         deadline = time.time() + self.challenge_timeout
+        click_after = deadline - min(20.0, self.challenge_timeout * 0.4)
         while time.time() < deadline:
             try:
                 title = await self.session.get_title()
@@ -432,10 +463,11 @@ class _BrowserBackend:
                 title = ""
             if "just a moment" not in (title or "").lower():
                 break
-            try:
-                await self.session.bypass_turnstile()
-            except RuntimeError:
-                pass
+            if time.time() >= click_after:
+                try:
+                    await self.session.bypass_turnstile()
+                except RuntimeError:
+                    pass
             await asyncio.sleep(1.5)
         try:
             title = await self.session.get_title()
@@ -444,7 +476,11 @@ class _BrowserBackend:
         if "just a moment" in (title or "").lower():
             raise exceptions.FailedToGenerateResponseError(
                 "PiAI: Cloudflare challenge did not clear in "
-                f"{self.challenge_timeout:.0f}s (try headless=False)"
+                f"{self.challenge_timeout:.0f}s (agent-browser stealth plugin "
+                "did not activate - ensure the shipped "
+                "agent_browser_stealth_plugin.py is registered via "
+                "AGENT_BROWSER_PLUGINS, or try stealth_chrome=True / "
+                "headless=False)"
             )
 
         try:
@@ -452,6 +488,10 @@ class _BrowserBackend:
             await self.session.evaluate_js(_CONSOLE_CLEAR_JS)
         except RuntimeError as e:
             logger.warning("PiAI: console capture setup failed: %s", e)
+        # Cursor snapshot happens right after the clear: any console line
+        # produced from here on belongs to the caller's marker dispatch,
+        # even when the in-page fetch completes within milliseconds.
+        return await self._console_len()
 
     async def _console_len(self) -> int:
         if self.session is None:
@@ -481,7 +521,7 @@ class _BrowserBackend:
         """In-page ``POST /api/chat/start``; returns the parsed JSON state."""
         if self.session is None:
             raise RuntimeError("PiAI browser worker is not running")
-        await self._prepare_page()
+        cursor = await self._prepare_page()
         js = (
             _START_FETCH_JS.replace("__ST__", MARK_STATUS)
             .replace("__JSON__", MARK_JSON)
@@ -493,7 +533,6 @@ class _BrowserBackend:
         except RuntimeError as e:
             logger.debug("PiAI: start dispatch returned: %s", e)
 
-        cursor = await self._console_len()
         deadline = time.time() + timeout
         raw = ""
         while time.time() < deadline:
@@ -535,7 +574,7 @@ class _BrowserBackend:
         """
         if self.session is None:
             raise RuntimeError("PiAI browser worker is not running")
-        await self._prepare_page()
+        cursor = await self._prepare_page()
         js = (
             _STREAM_FETCH_JS.replace("__CONV_B64__", _encode_text_b64(conversation_id or ""))
             .replace("__TEXT_B64__", _encode_text_b64(prompt))
@@ -550,7 +589,6 @@ class _BrowserBackend:
         except RuntimeError as e:
             logger.debug("PiAI: stream dispatch returned: %s", e)
 
-        cursor = await self._console_len()
         deadline = time.time() + timeout
         while time.time() < deadline:
             lines = await self._console_lines(cursor)
@@ -584,7 +622,7 @@ class _BrowserBackend:
             + "&messageSid="
             + urllib.parse.quote(message_sid)
         )
-        await self._prepare_page()
+        cursor = await self._prepare_page()
         js = (
             _VOICE_FETCH_JS.replace("__URL_B64__", _encode_text_b64(url))
             .replace("__PIECE__", MARK_PIECE)
@@ -596,7 +634,6 @@ class _BrowserBackend:
         except RuntimeError as e:
             logger.debug("PiAI: voice dispatch returned: %s", e)
 
-        cursor = await self._console_len()
         deadline = time.time() + timeout
         pieces: Dict[int, str] = {}
         while time.time() < deadline:
@@ -922,9 +959,10 @@ class PiAI(OpenAICompatibleProvider):
             timeout: Request timeout in seconds (chat streaming + TTS).
             proxies: Not supported by the browser backend (accepted for
                 API parity; silently ignored).
-            headless: Whether to run the browser headless. pi.ai sits
-                behind a Cloudflare challenge that very often fails in
-                headless mode — pass ``False`` on desktop machines.
+            headless: Whether to run the browser headless. Defaults to
+                ``True`` and works: the shipped agent-browser stealth
+                plugin clears the Cloudflare Turnstile challenge. Pass
+                ``False`` only as a manual fallback on desktop machines.
             user_data_dir: Optional persisted browser profile name.
             challenge_timeout: Seconds to wait for the Cloudflare
                 interstitial to clear.

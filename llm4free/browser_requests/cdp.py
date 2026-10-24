@@ -44,6 +44,42 @@ def find_agent_browser() -> str:
     )
 
 
+def stealth_plugin_env() -> Dict[str, str]:
+    """Environment entries registering the llm4free stealth plugin.
+
+    The plugin (``agent_browser_stealth_plugin.py``, shipped next to this
+    module) speaks the ``agent-browser.plugin.v1`` stdio protocol and mutates
+    every *local* browser launch: ``--disable-blink-features=AutomationControlled``,
+    a clean (non-``HeadlessChrome``) user agent, and a ``navigator.webdriver``
+    mask init script. Together these let Cloudflare Turnstile resolve fully
+    headless without any real-Chrome workaround.
+
+    agent-browser reads ``AGENT_BROWSER_PLUGINS`` as a JSON registry override,
+    so it must be present in the environment of the CLI calls that (may) spawn
+    the daemon / start the browser.
+
+    Returns:
+        Extra environment variables to merge into ``subprocess.run`` ``env``
+        when invoking the agent-browser CLI.
+    """
+    plugin_path = os.path.join(os.path.dirname(__file__), "agent_browser_stealth_plugin.py")
+    try:
+        if not os.access(plugin_path, os.X_OK):
+            os.chmod(plugin_path, 0o755)
+    except OSError as e:
+        logger.debug(f"stealth plugin chmod failed: {e}")
+    registry = json.dumps(
+        [
+            {
+                "name": "llm4free-stealth",
+                "command": plugin_path,
+                "capabilities": ["launch.mutate"],
+            }
+        ]
+    )
+    return {"AGENT_BROWSER_PLUGINS": registry}
+
+
 def _run_agent_browser(
     session_id: Optional[str],
     *args: str,
@@ -88,6 +124,7 @@ def _run_agent_browser(
             capture_output=True,
             text=True,
             timeout=timeout,
+            env={**os.environ, **stealth_plugin_env()},
         )
     except FileNotFoundError as e:
         raise RuntimeError(f"agent-browser CLI not found: {e}")
@@ -416,10 +453,27 @@ class CDPSession:
         await self._run("open", "about:blank", timeout=60)
         self._started = True
 
-    async def navigate(self, url: str) -> None:
-        """Navigate to a URL and wait for the network to settle."""
+    async def navigate(self, url: str, force: bool = False) -> None:
+        """Navigate to a URL and wait for the network to settle.
+
+        A navigation reloads the page, which aborts any in-flight challenge
+        solve (e.g. Cloudflare Turnstile). By default the navigation is
+        skipped when the browser already sits on ``url``; pass
+        ``force=True`` to reload regardless.
+
+        Args:
+            url: Target URL.
+            force: Force a reload even when already on ``url``.
+        """
         if not self._started:
             await self.start()
+        if not force:
+            try:
+                current = await self._run("get", "url", timeout=30)
+            except RuntimeError:
+                current = ""
+            if current.rstrip("/").split("?")[0] == url.rstrip("/").split("?")[0]:
+                return
         await self._run("open", url, timeout=60)
         # Wait for load; ignore timeout failures (page may already be ready).
         try:
@@ -748,10 +802,26 @@ class SyncCDPSession:
         self._run("open", "about:blank", timeout=60)
         self._started = True
 
-    def navigate(self, url: str) -> None:
-        """Navigate to a URL and wait for the network to settle."""
+    def navigate(self, url: str, force: bool = False) -> None:
+        """Navigate to a URL and wait for the network to settle.
+
+        Skips the navigation when the browser is already on ``url`` so
+        in-flight challenge solves are not interrupted (see
+        :meth:`CDPSession.navigate`).
+
+        Args:
+            url: Target URL.
+            force: Force a reload even when already on ``url``.
+        """
         if not self._started:
             self.start_chrome()
+        if not force:
+            try:
+                current = self._run("get", "url", timeout=30)
+            except RuntimeError:
+                current = ""
+            if current.rstrip("/").split("?")[0] == url.rstrip("/").split("?")[0]:
+                return
         self._run("open", url, timeout=60)
         try:
             self._run("wait", "--load", "networkidle", timeout=60)
