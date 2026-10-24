@@ -1,14 +1,9 @@
 import json
-import re
 import time
 import uuid
-from typing import Any, Dict, Generator, List, Optional, Union, cast
+from typing import Any, Dict, Generator, List, Optional, Union
 
-from curl_cffi.requests import Session
-
-from llm4free.litagent import LitAgent as agent
-
-# Import base classes and utility structures
+from llm4free.browser_requests.cdp import CDPSession
 from llm4free.llm.base import (
     BaseChat,
     BaseCompletions,
@@ -26,22 +21,15 @@ from llm4free.llm.utils import (
     format_prompt,
 )
 
-# AkashGPT constants
 AVAILABLE_MODELS = [
-    "DeepSeek-V4-Flash"
-
+    "openai-gpt-oss-120b",
+    "Meta-Llama-3-3-70B-Instruct",
 ]
 
-
-def _akash_extractor(chunk: Union[str, Dict[str, Any]]) -> Optional[str]:
-    """Extracts content from the AkashGPT stream format '0:"..."'."""
-    if isinstance(chunk, str):
-        match = re.search(r'0:"(.*?)"', chunk)
-        if match:
-            # Decode potential unicode escapes like \u00e9
-            content = match.group(1).encode().decode("unicode_escape", errors="replace")
-            return content.replace("\\", "\\").replace("\\", '"')
-    return None
+MODEL_MAP = {
+    "DeepSeek-V4-Flash": "openai-gpt-oss-120b",
+    "gpt-oss-120b": "openai-gpt-oss-120b",
+}
 
 
 class Completions(BaseCompletions):
@@ -61,298 +49,136 @@ class Completions(BaseCompletions):
         proxies: Optional[dict] = None,
         **kwargs: Any,
     ) -> Union[ChatCompletion, Generator[ChatCompletionChunk, None, None]]:
-        """
-        Create a chat completion with AkashGPT API.
-        Mimics openai.chat.completions.create
-        """
-        # Use format_prompt utility to format the conversation
-        conversation_prompt = format_prompt(messages, add_special_tokens=True, include_system=True)
-        # Generate request ID and timestamp
-        request_id = str(uuid.uuid4())
+        model = MODEL_MAP.get(model, model)
+        if model not in AVAILABLE_MODELS:
+            model = AVAILABLE_MODELS[0]
+        request_id = f"chatcmpl-{uuid.uuid4()}"
         created_time = int(time.time())
-
-        # Use the provided model directly
-        akash_model = model
-
         if stream:
-            return self._create_streaming(
-                request_id,
-                created_time,
-                akash_model,
-                conversation_prompt,
-                messages,
-                max_tokens,
-                temperature,
-                top_p,
-                timeout,
-                proxies,
-            )
-        else:
-            return self._create_non_streaming(
-                request_id,
-                created_time,
-                akash_model,
-                conversation_prompt,
-                messages,
-                max_tokens,
-                temperature,
-                top_p,
-                timeout,
-                proxies,
-            )
+            return self._stream(request_id, created_time, model, messages, timeout)
+        return self._non_stream(request_id, created_time, model, messages, timeout)
 
-    def _create_streaming(
-        self,
-        request_id: str,
-        created_time: int,
-        model: str,
-        conversation_prompt: str,
-        messages: List[Dict[str, str]],
-        max_tokens: Optional[int],
-        temperature: Optional[float],
-        top_p: Optional[float],
-        timeout: Optional[int],
-        proxies: Optional[dict],
-    ) -> Generator[ChatCompletionChunk, None, None]:
-        """Implementation for streaming chat completions."""
-        try:
-            # Calculate prompt tokens
-            prompt_tokens = count_tokens(conversation_prompt)
-            completion_tokens = 0
-            total_tokens = 0
+    def _stream(self, request_id, created_time, model, messages, timeout):
+        import asyncio
+        import threading
 
-            # Make the API request to AkashGPT
-            payload = {
-                "id": str(uuid.uuid4()).replace("-", ""),
-                "messages": messages,
-                "model": model,
-                "temperature": temperature or 0.6,
-                "topP": top_p or 0.9,
-                "context": [],
-            }
+        result = []
 
-            response = self._client.session.post(
-                self._client.api_endpoint,
-                headers=self._client.headers,
-                json=payload,
-                timeout=timeout or 30,
-                proxies=proxies,  # ty:ignore[invalid-argument-type]
-                stream=True,
-            )
-
-            if not response.ok:
-                raise Exception(
-                    f"Failed to generate response - ({response.status_code}, {response.reason}) - {response.text}"
-                )
-
-            full_content = ""
-            prompt_tokens = 0
-            completion_tokens = 0
-
-            # Process the streaming response
-            for line in response.iter_lines(decode_unicode=False):
-                if line:
-                    if isinstance(line, bytes):
-                        line = line.decode("utf-8")
-                    line = line.strip()
-
-                    # Parse the AkashGPT response format
-                    if line.startswith('0:"') and line.endswith('"'):
-                        # Extract content from 0:"content" format
-                        content = line[3:-1]  # Remove 0:" and "
-                        # Decode escaped characters
-                        content = content.encode().decode("unicode_escape", errors="replace")
-
-                        # Calculate delta (new content since last chunk)
-                        delta_content = (
-                            content[len(full_content) :]
-                            if content.startswith(full_content)
-                            else content
-                        )
-                        full_content = content
-
-                        if delta_content:
-                            completion_tokens = count_tokens(full_content)
-                            total_tokens = prompt_tokens + completion_tokens
-
-                            delta = ChoiceDelta(content=delta_content, role="assistant")
-                            choice = Choice(index=0, delta=delta, finish_reason=None)
-                            chunk_response = ChatCompletionChunk(
-                                id=request_id,
-                                choices=[choice],
-                                created=created_time,
-                                model=model,
-                            )
-                            chunk_response.usage = {
-                                "prompt_tokens": prompt_tokens,
-                                "completion_tokens": completion_tokens,
-                                "total_tokens": total_tokens,
+        def _run():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                async def run():
+                    session = CDPSession(headless=True)
+                    try:
+                        await session.start()
+                        await session.navigate("https://chat.akash.network/")
+                        await asyncio.sleep(4)
+                        await session.install_console_capture()
+                        payload = {
+                            "id": uuid.uuid4().hex,
+                            "messages": messages,
+                            "model": model,
+                            "temperature": 0.6,
+                            "topP": 0.9,
+                            "context": [],
+                        }
+                        js = """
+                        (async () => {
+                          try {
+                            const res = await fetch('https://chat.akash.network/api/chat', {
+                              method: 'POST',
+                              headers: {'content-type': 'application/json'},
+                              body: JSON.stringify(%s)
+                            });
+                            if(!res.ok) { console.log('AKASH_ERR:' + res.status); return; }
+                            const reader = res.body.getReader();
+                            const decoder = new TextDecoder();
+                            let buf = '';
+                            while(true) {
+                              const {done, value} = await reader.read();
+                              if(done) break;
+                              buf += decoder.decode(value);
+                              const lines = buf.split('\\n');
+                              buf = lines.pop() || '';
+                              for(const line of lines) {
+                                if(!line.trim()) continue;
+                                if(line.startsWith('0:')) {
+                                  try {
+                                    let c = line.slice(2);
+                                    if(c.startsWith('"') && c.endsWith('"')) c = JSON.parse(c);
+                                    console.log('AKASH_CHUNK:' + c);
+                                  } catch(e) {}
+                                }
+                              }
                             }
-                            yield chunk_response
-
-                    elif line.startswith("e:{"):
-                        # Extract usage from e: line
-                        import json
-
-                        try:
-                            usage_data = json.loads(line[2:])  # Remove 'e:'
-                            prompt_tokens = usage_data.get("usage", {}).get(
-                                "promptTokens", prompt_tokens
-                            )
-                            completion_tokens = usage_data.get("usage", {}).get(
-                                "completionTokens", completion_tokens
-                            )
-                        except json.JSONDecodeError:
-                            pass
-                    elif line.startswith("d:{"):
-                        # Alternative usage extraction from d: line
-                        if prompt_tokens == 0:  # Only if not already set
-                            import json
-
+                            console.log('AKASH_DONE');
+                          } catch(e) { console.log('AKASH_ERR:' + e.toString()); }
+                        })();
+                        """ % json.dumps(payload)
+                        await session.evaluate_js(js)
+                        start = time.time()
+                        seen = 0
+                        while time.time() - start < (timeout or 90):
                             try:
-                                usage_data = json.loads(line[2:])  # Remove 'd:'
-                                prompt_tokens = usage_data.get("usage", {}).get(
-                                    "promptTokens", prompt_tokens
-                                )
-                                completion_tokens = usage_data.get("usage", {}).get(
-                                    "completionTokens", completion_tokens
-                                )
-                            except json.JSONDecodeError:
-                                pass
+                                buf = await session.evaluate_js("(window.__llm4free_console||[]).slice().join('\\n')")
+                            except Exception:
+                                break
+                            if not isinstance(buf, str):
+                                await asyncio.sleep(1)
+                                continue
+                            lines = buf.split("\n")
+                            for line in lines[seen:]:
+                                seen += 1
+                                if not line:
+                                    continue
+                                if line.startswith("AKASH_ERR:"):
+                                    raise IOError(f"AkashGPT request failed: {line}")
+                                if line.startswith("AKASH_DONE"):
+                                    break
+                                if line.startswith("AKASH_CHUNK:"):
+                                    content = line[len("AKASH_CHUNK:") :]
+                                    result.append(ChatCompletionChunk(
+                                        id=request_id,
+                                        choices=[Choice(index=0, delta=ChoiceDelta(content=content, role="assistant"), finish_reason=None)],
+                                        created=created_time,
+                                        model=model,
+                                    ))
+                            if any(l.startswith("AKASH_DONE") or l.startswith("AKASH_ERR") for l in lines[seen-10:seen]):
+                                break
+                            await asyncio.sleep(0.5)
+                        result.append(ChatCompletionChunk(
+                            id=request_id,
+                            choices=[Choice(index=0, delta=ChoiceDelta(content=None, role=None), finish_reason="stop")],
+                            created=created_time,
+                            model=model,
+                        ))
+                    finally:
+                        await session.close()
+                loop.run_until_complete(run())
+            finally:
+                loop.close()
 
-            # Final chunk with finish_reason
-            total_tokens = prompt_tokens + completion_tokens
-            delta = ChoiceDelta(content=None)
-            choice = Choice(index=0, delta=delta, finish_reason="stop")
-            final_chunk = ChatCompletionChunk(
-                id=request_id, choices=[choice], created=created_time, model=model
-            )
-            final_chunk.usage = {
-                "prompt_tokens": prompt_tokens,
-                "completion_tokens": completion_tokens,
-                "total_tokens": total_tokens,
-            }
-            yield final_chunk
+        t = threading.Thread(target=_run, daemon=True)
+        t.start()
+        t.join(timeout or 90)
+        return iter(result)
 
-        except Exception as e:
-            raise IOError(f"AkashGPT streaming request failed: {e}") from e
-
-    def _create_non_streaming(
-        self,
-        request_id: str,
-        created_time: int,
-        model: str,
-        conversation_prompt: str,
-        messages: List[Dict[str, str]],
-        max_tokens: Optional[int],
-        temperature: Optional[float],
-        top_p: Optional[float],
-        timeout: Optional[int],
-        proxies: Optional[dict],
-    ) -> ChatCompletion:
-        """Implementation for non-streaming chat completions."""
-        try:
-            # Calculate prompt tokens
-            prompt_tokens = count_tokens(conversation_prompt)
-
-            # Make the API request to AkashGPT
-            payload = {
-                "id": str(uuid.uuid4()).replace("-", ""),
-                "messages": messages,
-                "model": model,
-                "temperature": temperature or 0.6,
-                "topP": top_p or 0.9,
-                "context": [],
-            }
-
-            response = self._client.session.post(
-                self._client.api_endpoint,
-                headers=self._client.headers,
-                json=payload,
-                timeout=timeout or 30,
-                proxies=proxies,  # ty:ignore[invalid-argument-type]
-                stream=True,  # <-- Enable streaming mode for iter_lines
-            )
-
-            if not response.ok:
-                raise Exception(
-                    f"Failed to generate response - ({response.status_code}, {response.reason}) - {response.text}"
-                )
-
-            # Collect the full response
-            full_content = ""
-            prompt_tokens = 0
-            completion_tokens = 0
-
-            for line in response.iter_lines(decode_unicode=False):
-                if line:
-                    if isinstance(line, bytes):
-                        line = line.decode("utf-8")
-                    line = line.strip()
-
-                    # Parse the AkashGPT response format
-                    if line.startswith('0:"') and line.endswith('"'):
-                        # Extract content from 0:"content" format
-                        content = line[3:-1]  # Remove 0:" and "
-                        # Decode escaped characters
-                        content = content.encode().decode("unicode_escape")
-                        full_content += content
-                    elif line.startswith("e:{"):
-                        # Extract usage from e: line
-                        import json
-
-                        try:
-                            usage_data = json.loads(line[2:])  # Remove 'e:'
-                            prompt_tokens = usage_data.get("usage", {}).get("promptTokens", 0)
-                            completion_tokens = usage_data.get("usage", {}).get(
-                                "completionTokens", 0
-                            )
-                        except json.JSONDecodeError:
-                            pass
-                    elif line.startswith("d:{"):
-                        # Alternative usage extraction from d: line
-                        if prompt_tokens == 0:  # Only if not already set
-                            import json
-
-                            try:
-                                usage_data = json.loads(line[2:])  # Remove 'd:'
-                                prompt_tokens = usage_data.get("usage", {}).get("promptTokens", 0)
-                                completion_tokens = usage_data.get("usage", {}).get(
-                                    "completionTokens", 0
-                                )
-                            except json.JSONDecodeError:
-                                pass
-
-            # Calculate completion tokens if not provided by API
-            if completion_tokens == 0:
-                completion_tokens = count_tokens(full_content)
-            total_tokens = prompt_tokens + completion_tokens
-
-            # Create the completion message
-            message = ChatCompletionMessage(role="assistant", content=full_content)
-
-            # Create the choice
-            choice = Choice(index=0, message=message, finish_reason="stop")
-
-            usage = CompletionUsage(
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-                total_tokens=total_tokens,
-            )
-
-            # Create the completion object
-            completion = ChatCompletion(
-                id=request_id,
-                choices=[choice],
-                created=created_time,
-                model=model,
-                usage=usage,
-            )
-
-            return completion
-
-        except Exception as e:
-            raise IOError(f"AkashGPT request failed: {e}") from e
+    def _non_stream(self, request_id, created_time, model, messages, timeout):
+        chunks = list(self._stream(request_id, created_time, model, messages, timeout))
+        content = ""
+        for c in chunks:
+            if c.choices and c.choices[0].delta and c.choices[0].delta.content:
+                content += c.choices[0].delta.content
+        prompt_tokens = count_tokens(format_prompt(messages))
+        completion_tokens = count_tokens(content)
+        return ChatCompletion(
+            id=request_id,
+            choices=[Choice(index=0, message=ChatCompletionMessage(role="assistant", content=content), finish_reason="stop")],
+            created=created_time,
+            model=model,
+            usage=CompletionUsage(prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, total_tokens=prompt_tokens + completion_tokens),
+        )
 
 
 class Chat(BaseChat):
@@ -361,88 +187,29 @@ class Chat(BaseChat):
 
 
 class AkashGPT(OpenAICompatibleProvider):
-    """
-    OpenAI-compatible client for AkashGPT API.
-
-    Usage:
-        client = AkashGPT()
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[{"role": "user", "content": "Hello!"}]
-        )
-        print(response.choices[0].message.content)
-    """
-
     required_auth = False
-
     AVAILABLE_MODELS = AVAILABLE_MODELS
+    default_model = AVAILABLE_MODELS[0]
 
-    def __init__(self, tools: Optional[List] = None, proxies: Optional[Dict[str, str]] = None):
-        """
-        Initialize the AkashGPT-compatible client.
-
-        Args:
-            tools: Optional list of tools to register with the provider
-            proxies: Optional proxy configuration dict
-        """
-        super().__init__(api_key=None, tools=tools, proxies=proxies)
-
-        # Replace requests.Session with curlcffi.requests.Session for better performance
-        self.session = Session()
-        if self.proxies:
-            self.session.proxies.update(cast(Any, self.proxies))
-
-        self.timeout = 30
-        self.api_endpoint = "https://chat.akash.network/api/chat"
-        self.user_agent = agent().random()
-        self.headers = {
-            "accept": "*/*",
-            "accept-encoding": "gzip, deflate, br, zstd",
-            "accept-language": "en-US,en;q=0.9,en-IN;q=0.8",
-            "content-type": "application/json",
-            "dnt": "1",
-            "origin": "https://chat.akash.network",
-            "priority": "u=1, i",
-            "referer": "https://chat.akash.network/",
-            "sec-ch-ua": '"Not:A-Brand";v="99", "Microsoft Edge";v="145", "Chromium";v="145"',
-            "sec-ch-ua-mobile": "?0",
-            "sec-ch-ua-platform": '"Windows"',
-            "sec-fetch-dest": "empty",
-            "sec-fetch-mode": "cors",
-            "sec-fetch-site": "same-origin",
-            "sec-gpc": "1",
-            "user-agent": self.user_agent,
-        }
-
-        self.session.headers.update(self.headers)
-
-        # Initialize chat interface
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         self.chat = Chat(self)
 
-    @property
-    def models(self) -> SimpleModelList:
-        return SimpleModelList(type(self).AVAILABLE_MODELS)
+    @classmethod
+    def get_models(cls, api_key=None):
+        return cls.AVAILABLE_MODELS
 
+    @property
+    def models(self):
+        return SimpleModelList(type(self).AVAILABLE_MODELS)
 
 if __name__ == "__main__":
     from rich import print
-
-    client = AkashGPT()
-    print("NON-STREAMING RESPONSE:")
-    response = client.chat.completions.create(
-        model="DeepSeek-V4-Flash",
-        messages=[
-            {"role": "user", "content": "Hello, how are you?"},
-        ],
-    )
-    print(response)
-    print("\nSTREAMING RESPONSE:")
-    stream_response = client.chat.completions.create(
-        model="DeepSeek-V4-Flash",
-        messages=[
-            {"role": "user", "content": "Hello, how are you?"},
-        ],
-        stream=True,
-    )
-    for chunk in stream_response:
-        print(chunk)
+    akash = AkashGPT()
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Hello, how are you?"},
+    ]
+    completion = akash.chat.completions.create(model="openai-gpt-oss-120b", messages=messages, stream=True)
+    for chunk in completion:
+        print(chunk, end="", flush=True)
