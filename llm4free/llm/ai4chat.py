@@ -1,7 +1,7 @@
 import json
 import time
 import uuid
-from typing import Any, Dict, Generator, List, Optional, Union, cast
+from typing import Any, Dict, Generator, List, Optional, cast
 
 from curl_cffi.requests import RequestsError
 
@@ -373,7 +373,7 @@ class Completions(BaseCompletions):
         timeout: Optional[int] = None,
         proxies: Optional[dict] = None,
         **kwargs: Any,
-    ) -> Union[ChatCompletion, Generator[ChatCompletionChunk, None, None]]:
+    ) -> Any:
         """
         Creates a model response for the given chat conversation.
         Mimics openai.chat.completions.create

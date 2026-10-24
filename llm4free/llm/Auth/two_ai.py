@@ -1,7 +1,7 @@
 import json
 import time
 import uuid
-from typing import Any, Dict, Generator, List, Optional, Union, cast
+from typing import Any, Dict, Generator, List, Optional, cast
 
 # Import base classes and utilities from llm provider stack
 from llm4free.llm.base import (
@@ -39,7 +39,7 @@ class Completions(BaseCompletions):
         proxies: Optional[Dict[str, str]] = None,
         online_search: Optional[bool] = None,
         **kwargs: Any,
-    ) -> Union[ChatCompletion, Generator[ChatCompletionChunk, None, None]]:
+    ) -> Any:
         """Create a chat completion using TwoAI."""
         payload: Dict[str, Any] = {
             "model": model,

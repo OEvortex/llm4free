@@ -142,7 +142,7 @@ class BaseCompletions(ABC):
         timeout: Optional[int] = None,
         proxies: Optional[dict] = None,
         **kwargs: Any,
-    ) -> Union[ChatCompletion, Generator[ChatCompletionChunk, None, None]]: ...
+    ) -> Any: ...
 
     @abstractmethod
     def create(
@@ -161,7 +161,7 @@ class BaseCompletions(ABC):
         timeout: Optional[int] = None,
         proxies: Optional[dict] = None,
         **kwargs: Any,
-    ) -> Union[ChatCompletion, Generator[ChatCompletionChunk, None, None]]:
+    ) -> Any:
         """
         Abstract method to create chat completions with tool support.
 

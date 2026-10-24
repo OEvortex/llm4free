@@ -158,7 +158,7 @@ class Completions(BaseCompletions):
         timeout: Optional[int] = None,
         proxies: Optional[dict] = None,
         **kwargs: Any,
-    ) -> Union[ChatCompletion, Generator[ChatCompletionChunk, None, None]]:
+    ) -> Any:
         resolved = _resolve_model(model)
         prompt = _convert_messages(messages)
 

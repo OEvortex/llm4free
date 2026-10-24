@@ -44,7 +44,7 @@ class Completions(BaseCompletions):
         messages: Optional[List[Dict[str, Any]]] = None,
         stream: bool = False,
         **kwargs: Any,
-    ) -> Union[ChatCompletion, Generator[ChatCompletionChunk, None, None]]:
+    ) -> Any:
         model = model or self._client.default_model
         model_name = MODELS.get(model, model)
         messages = messages or []

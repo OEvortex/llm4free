@@ -6,7 +6,7 @@ This module provides an OpenAI-compatible interface for Upstage's Solar models.
 import json
 import time
 import uuid
-from typing import Any, Dict, Generator, List, Optional, Union, cast
+from typing import Any, Dict, Generator, List, Optional, cast
 
 from curl_cffi import CurlError
 from curl_cffi.requests import Session
@@ -40,7 +40,7 @@ class Completions(BaseCompletions):
         temperature: Optional[float] = None,
         top_p: Optional[float] = None,
         **kwargs: Any,
-    ) -> Union[ChatCompletion, Generator[ChatCompletionChunk, None, None]]:
+    ) -> Any:
         """
         Creates a model response for the given chat conversation.
         Mimics openai.chat.completions.create

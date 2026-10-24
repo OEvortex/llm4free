@@ -1,7 +1,7 @@
 import json
 import time
 import uuid
-from typing import Any, Dict, Generator, List, Optional, Union, cast
+from typing import Any, Dict, Generator, List, Optional, cast
 
 from curl_cffi import requests
 from curl_cffi.requests import Session
@@ -40,7 +40,7 @@ class Completions(BaseCompletions):
         timeout: Optional[int] = None,
         proxies: Optional[Dict[str, str]] = None,
         **kwargs: Any,
-    ) -> Union[ChatCompletion, Generator[ChatCompletionChunk, None, None]]:
+    ) -> Any:
         payload: Dict[str, Any] = {
             "model": model,
             "messages": messages,

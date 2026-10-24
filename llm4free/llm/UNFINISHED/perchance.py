@@ -14,7 +14,7 @@ import asyncio
 import json
 import time
 import uuid
-from typing import Any, Dict, Generator, List, Optional, Union
+from typing import Any, Dict, Generator, List, Optional
 
 from curl_cffi.requests import Session
 
@@ -123,7 +123,7 @@ class Completions(BaseCompletions):
         timeout: Optional[int] = None,
         proxies: Optional[dict] = None,
         **kwargs: Any,
-    ) -> Union[ChatCompletion, Generator[ChatCompletionChunk, None, None]]:
+    ) -> Any:
         """
         Create a chat completion with the Perchance API.
 
@@ -175,7 +175,7 @@ class Completions(BaseCompletions):
         stream: bool,
         timeout: Optional[int],
         proxies: Optional[dict],
-    ) -> Union[ChatCompletion, Generator[ChatCompletionChunk, None, None]]:
+    ) -> Any:
         """Build the request and dispatch to streaming/non-streaming paths."""
         payload = {
             "instruction": prompt,

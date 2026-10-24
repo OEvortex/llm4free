@@ -4,10 +4,13 @@ import json
 import logging
 import os
 import random
+import re
 import shutil
 import subprocess
 import tempfile
 import time
+import urllib.parse
+import urllib.request
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -135,6 +138,155 @@ def _encode_js(expression: str) -> List[str]:
 
 
 # --------------------------------------------------------------------------- #
+# Stealth Chrome launcher (headless Turnstile support)
+# --------------------------------------------------------------------------- #
+_STEALTH_UA_FORMAT = (
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/{major}.0.0.0 Safari/537.36"
+)
+
+
+def find_chrome_binary() -> str:
+    """Locate a real Chrome/Chromium binary for stealth mode.
+
+    Search order: ``$LLM4FREE_CHROME_PATH``, common binaries on PATH, then
+    the browser agent-browser installs under the Playwright cache.
+
+    Raises:
+        RuntimeError: If no Chrome/Chromium binary can be found.
+    """
+    env_path = os.environ.get("LLM4FREE_CHROME_PATH")
+    if env_path and os.path.exists(env_path):
+        return env_path
+    for name in (
+        "google-chrome",
+        "google-chrome-stable",
+        "chromium",
+        "chromium-browser",
+        "chrome",
+    ):
+        found = shutil.which(name)
+        if found:
+            return found
+    # agent-browser install fallback (chromium-<rev>/chrome-linux*/chrome).
+    cache_dir = os.path.expanduser("~/.cache/ms-playwright")
+    if os.path.isdir(cache_dir):
+        for entry in sorted(
+            (e for e in os.listdir(cache_dir) if e.startswith("chromium-")),
+            reverse=True,
+        ):
+            for sub in ("chrome-linux64", "chrome-linux", "chrome"):
+                candidate = os.path.join(cache_dir, entry, sub, "chrome")
+                if os.path.exists(candidate):
+                    return candidate
+    raise RuntimeError(
+        "Chrome/Chromium not found for stealth mode. "
+        "Install Chrome or set LLM4FREE_CHROME_PATH."
+    )
+
+
+def _chrome_user_agent(binary: str) -> str:
+    """Realistic (HeadlessChrome-free) user agent string for the launch flag."""
+    try:
+        version_out = subprocess.run(
+            [binary, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        ).stdout
+    except Exception:
+        version_out = ""
+    match = re.search(r"(\d+)\.", version_out)
+    major = match.group(1) if match else "131"
+    return _STEALTH_UA_FORMAT.format(major=major)
+
+
+def _chrome_cdp_alive(host: str, port: int) -> bool:
+    """Check whether a CDP endpoint already answers on ``host:port``."""
+    try:
+        with urllib.request.urlopen(
+            f"http://{host}:{port}/json/version", timeout=1
+        ) as resp:
+            return resp.status == 200
+    except Exception:
+        return False
+
+
+def launch_stealth_chrome(
+    port: int = 9222,
+    host: str = "127.0.0.1",
+    user_data_dir: Optional[str] = None,
+    headless: bool = True,
+) -> Tuple[Any, Optional[str]]:
+    """Launch a real Chrome optimized to pass Cloudflare Turnstile headless.
+
+    The critical parts are a *genuine* Chrome process (not driverless
+    shell) with ``--disable-blink-features=AutomationControlled`` so
+    ``navigator.webdriver`` is ``false``, a non-"HeadlessChrome" user
+    agent, and ``--headless=new`` semantics. Turnstile then clears by
+    itself in seconds without any clicking.
+
+    Args:
+        port: CDP ``--remote-debugging-port`` to listen on.
+        host: Bind host (default ``127.0.0.1`` only).
+        user_data_dir: Optional persistent profile directory; a throwaway
+            temp profile is created otherwise.
+        headless: Launch in ``--headless=new`` mode (default).
+
+    Returns:
+        ``(process, profile_dir_or_None)`` — the ``Popen`` handle so the
+        caller can terminate the browser later.
+    """
+    if _chrome_cdp_alive(host, port):
+        # A CDP-capable Chrome already runs on this port: reuse it.
+        return None, None
+
+    binary = find_chrome_binary()
+    flags = [
+        binary,
+        f"--remote-debugging-port={port}",
+        "--disable-blink-features=AutomationControlled",
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--disable-gpu",
+        "--disable-dev-shm-usage",
+        "--window-size=1366,768",
+        f"--user-agent={_chrome_user_agent(binary)}",
+    ]
+    if headless:
+        flags.append("--headless=new")
+
+    profile_dir: Optional[str] = None
+    if user_data_dir:
+        profile_dir = user_data_dir
+        flags.append(f"--user-data-dir={profile_dir}")
+    elif headless:
+        # Keep headless runs contained in an ephemeral profile.
+        profile_dir = tempfile.mkdtemp(prefix="llm4free-chrome-")
+        flags.append(f"--user-data-dir={profile_dir}")
+
+    flags.append("about:blank")
+
+    for attempt in range(5):
+        proc = subprocess.Popen(
+            flags,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        deadline = time.time() + 30
+        while time.time() < deadline:
+            if proc.poll() is not None:
+                break  # crashed (e.g. port taken) — retry with a new profile
+            if _chrome_cdp_alive(host, port):
+                return proc, profile_dir
+            time.sleep(0.5)
+        if proc.poll() is None:
+            proc.terminate()
+        time.sleep(1.0)
+    raise RuntimeError(f"Failed to launch stealth Chrome on port {port}")
+
+
+# --------------------------------------------------------------------------- #
 # Async CDP session (backed by agent-browser)
 # --------------------------------------------------------------------------- #
 class CDPSession:
@@ -151,19 +303,38 @@ class CDPSession:
         host: Optional[str] = None,
         user_data_dir: Optional[str] = None,
         headless: bool = True,
+        launch_stealth_chrome: bool = False,
     ) -> None:
         """Initialize the session.
 
         Args:
-            port: Ignored for the agent-browser backend (kept for API parity).
-            host: Ignored for the agent-browser backend (kept for API parity).
-            user_data_dir: Optional profile name passed as ``--profile``.
-            headless: Whether to run the browser headless.
+            port: External CDP port. When given, the session *connects* to
+                a Chrome running there instead of spawning its own
+                agent-browser browser. Pair with
+                ``launch_stealth_chrome=True`` to auto-launch a stealth
+                Chrome (headless Turnstile-capable).
+            host: CDP bind host (default ``127.0.0.1``).
+            user_data_dir: Optional profile name passed as ``--profile``
+                (agent-browser mode) or used as ``--user-data-dir``
+                (stealth Chrome mode).
+            headless: Whether to run the browser headless (stealth Chrome
+                uses ``--headless=new``; agent-browser mode passes
+                ``--headed`` otherwise).
+            launch_stealth_chrome: Auto-launch a real Chrome with
+                ``--disable-blink-features=AutomationControlled`` and a
+                clean user agent, then connect to it. This is what lets
+                Cloudflare Turnstile resolve *headless*.
         """
         self.headless = headless
+        self.host = host or "127.0.0.1"
+        self.port = port if launch_stealth_chrome or port is not None else None
+        self.launch_stealth_chrome = launch_stealth_chrome
         self.user_data_dir = user_data_dir
         self.session_id: str = f"llm4free-{uuid.uuid4().hex[:12]}"
         self._started = False
+        self._connected = False
+        self._chrome_proc: Optional[Any] = None
+        self._chrome_profile: Optional[str] = None
         self._console_buffer: List[str] = []
 
         # Network event loggers (kept for API parity; populated by navigate).
@@ -197,9 +368,50 @@ class CDPSession:
             use_npx=use_npx,
         )
 
+    async def _launch_chrome(self) -> None:
+        """Start the stealth Chrome process and register its handle."""
+        if self._chrome_proc is not None:
+            return
+        if self._chrome_cdp_ready():
+            return  # an external Chrome already listens on the port
+        proc, profile_dir = await asyncio.to_thread(
+            launch_stealth_chrome,
+            self.port or 9222,
+            self.host,
+            self.user_data_dir,
+            self.headless,
+        )
+        self._chrome_proc = proc
+        self._chrome_profile = profile_dir
+
+    def _chrome_cdp_ready(self) -> bool:
+        if self.port is None:
+            return False
+        return _chrome_cdp_alive(self.host, self.port)
+
     async def start(self) -> None:
-        """Open a blank page so the session/browser is ready."""
+        """Open a blank page so the session/browser is ready.
+
+        In stealth/connect mode this attaches agent-browser to a real
+        Chrome process (launched if ``launch_stealth_chrome``), which is
+        what lets Turnstile challenges clear headless.
+        """
         if self._started:
+            return
+        if self.port is not None:
+            if self.launch_stealth_chrome:
+                await self._launch_chrome()
+            if not self._chrome_cdp_ready():
+                raise RuntimeError(
+                    f"No CDP endpoint reachable on {self.host}:{self.port}"
+                )
+            try:
+                await self._run("connect", str(self.port), timeout=60)
+            except RuntimeError:
+                # Maybe already connected for this session — fine.
+                pass
+            self._connected = True
+            self._started = True
             return
         await self._run("open", "about:blank", timeout=60)
         self._started = True
@@ -408,12 +620,26 @@ class CDPSession:
         pass
 
     async def close(self) -> None:
-        """Close the agent-browser session."""
+        """Close the agent-browser session (and any Chrome we launched)."""
         try:
             await self._run("close", timeout=30)
         except RuntimeError as e:
             logger.warning(f"agent-browser close failed: {e}")
         self._started = False
+        self._connected = False
+
+        proc = self._chrome_proc
+        if proc is not None:
+            self._chrome_proc = None
+            try:
+                proc.terminate()
+                proc.wait(timeout=10)
+            except Exception as e:
+                logger.debug(f"stealth Chrome terminate failed: {e}")
+        profile = self._chrome_profile
+        if profile is not None:
+            self._chrome_profile = None
+            await asyncio.to_thread(shutil.rmtree, profile, True)
 
 
 # --------------------------------------------------------------------------- #
@@ -435,20 +661,33 @@ class SyncCDPSession:
         host: str = "127.0.0.1",
         user_data_dir: Optional[str] = None,
         headless: bool = False,
+        launch_stealth_chrome: bool = False,
     ) -> None:
         """Initialize the sync session.
 
         Args:
-            port: Ignored for the agent-browser backend (kept for API parity).
-            host: Ignored for the agent-browser backend (kept for API parity).
-            user_data_dir: Optional profile name.
-            headless: Whether to run the browser headless (default False so the
-                challenge widget is interactive).
+            port: External CDP port. With ``launch_stealth_chrome=True`` a
+                real Chrome is auto-launched on this port and the session
+                connects to it (headless Turnstile-capable).
+            host: CDP bind host (default ``127.0.0.1``).
+            user_data_dir: Optional profile name / Chrome user-data dir.
+            headless: Whether to run the browser headless (default False so
+                agent-browser challenges get an interactive window; stealth
+                Chrome headless mode works too via ``--headless=new``).
+            launch_stealth_chrome: Auto-launch a stealth Chrome
+                (``--disable-blink-features=AutomationControlled``) and
+                connect to it.
         """
+        self.host: str = host
+        self.port: int = port
         self.headless = headless
+        self.launch_stealth_chrome = launch_stealth_chrome
         self.user_data_dir = user_data_dir
         self.session_id: str = f"llm4free-{uuid.uuid4().hex[:12]}"
         self._started = False
+        self._connected = False
+        self._chrome_proc: Optional[Any] = None
+        self._chrome_profile: Optional[str] = None
 
         self.network_requests: List[dict] = []
         self.network_responses: List[dict] = []
@@ -470,9 +709,41 @@ class SyncCDPSession:
             use_npx=use_npx,
         )
 
+    def _launch_chrome(self) -> None:
+        """Start the stealth Chrome process and register its handle."""
+        if self._chrome_proc is not None:
+            return
+        if _chrome_cdp_alive(self.host, self.port):
+            return  # an external Chrome already listens on the port
+        proc, profile_dir = launch_stealth_chrome(
+            self.port, self.host, self.user_data_dir, self.headless
+        )
+        self._chrome_proc = proc
+        self._chrome_profile = profile_dir
+
+    def _chrome_cdp_ready(self) -> bool:
+        return _chrome_cdp_alive(self.host, self.port)
+
     def start_chrome(self) -> None:
-        """Open a blank page so the session/browser is ready."""
+        """Open a blank page so the session/browser is ready.
+
+        Stealth/connect mode attaches to a real Chrome (launched if
+        ``launch_stealth_chrome``) for headless Turnstile support.
+        """
         if self._started:
+            return
+        if self.launch_stealth_chrome:
+            self._launch_chrome()
+            if not self._chrome_cdp_ready():
+                raise RuntimeError(
+                    f"No CDP endpoint reachable on {self.host}:{self.port}"
+                )
+            try:
+                self._run("connect", str(self.port), timeout=60)
+            except RuntimeError:
+                pass  # maybe already connected for this session
+            self._connected = True
+            self._started = True
             return
         self._run("open", "about:blank", timeout=60)
         self._started = True
@@ -542,9 +813,23 @@ class SyncCDPSession:
         time.sleep(0.2)
 
     def close(self) -> None:
-        """Close the agent-browser session."""
+        """Close the agent-browser session (and any Chrome we launched)."""
         try:
             self._run("close", timeout=30)
         except RuntimeError as e:
             logger.warning(f"agent-browser close failed: {e}")
         self._started = False
+        self._connected = False
+
+        proc = self._chrome_proc
+        if proc is not None:
+            self._chrome_proc = None
+            try:
+                proc.terminate()
+                proc.wait(timeout=10)
+            except Exception as e:
+                logger.debug(f"stealth Chrome terminate failed: {e}")
+        profile = self._chrome_profile
+        if profile is not None:
+            self._chrome_profile = None
+            shutil.rmtree(profile, ignore_errors=True)

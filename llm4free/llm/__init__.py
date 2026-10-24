@@ -67,7 +67,6 @@ from llm4free.llm.utils import (
     get_system_prompt,
 )
 from llm4free.llm.wisecat import WiseCat
-from llm4free.llm.writecream import Writecream
 
 # List of all exported names
 __all__ = [
@@ -127,7 +126,6 @@ __all__ = [
     "Toolbaz",
     "Upstage",
     "WiseCat",
-    "Writecream",
     "Zenmux",
     "Sambanova",
     "TypliAI",

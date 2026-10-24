@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import time
 import uuid
-from typing import Any, Dict, Generator, List, Optional, Union, cast
+from typing import Any, Dict, Generator, List, Optional, cast
 
 from curl_cffi import CurlError, requests
 
@@ -105,7 +105,7 @@ class Completions(BaseCompletions):
         timeout: Optional[int] = None,
         proxies: Optional[Dict[str, str]] = None,
         **kwargs: Any,
-    ) -> Union[ChatCompletion, Generator[ChatCompletionChunk, None, None]]:
+    ) -> Any:
         character = self._client.convert_model_name(model)
         char_info = CHARACTERS.get(character, CHARACTERS["assistant"])
 

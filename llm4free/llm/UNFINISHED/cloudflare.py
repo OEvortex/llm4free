@@ -319,7 +319,7 @@ class Completions(BaseCompletions):
         timeout: Optional[int] = None,
         proxies: Optional[dict] = None,
         **kwargs: Any,
-    ) -> Union[ChatCompletion, Generator[ChatCompletionChunk, None, None]]:
+    ) -> Any:
         """Create a chat completion with the Cloudflare AI Playground.
 
         Mimics ``openai.chat.completions.create``. The underlying CDP browser

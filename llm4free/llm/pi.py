@@ -314,6 +314,8 @@ class _WorkerThread(threading.Thread):
         session = CDPSession(
             headless=self._backend.headless,
             user_data_dir=self._backend.user_data_dir,
+            port=self._backend.port if self._backend.stealth_chrome else None,
+            launch_stealth_chrome=self._backend.stealth_chrome,
         )
         self.session = session
         try:
@@ -345,10 +347,14 @@ class _BrowserBackend:
         headless: bool = True,
         user_data_dir: Optional[str] = None,
         challenge_timeout: float = 60.0,
+        stealth_chrome: bool = True,
+        port: Optional[int] = None,
     ) -> None:
         self.headless = headless
         self.user_data_dir = user_data_dir
         self.challenge_timeout = challenge_timeout
+        self.stealth_chrome = stealth_chrome
+        self.port = port or 9222
         self._worker: Optional[_WorkerThread] = None
         self._lock = threading.Lock()
         self._closed = False

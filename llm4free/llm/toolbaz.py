@@ -6,7 +6,7 @@ import string
 import time
 import uuid
 from datetime import datetime
-from typing import Any, Dict, Generator, List, Optional, Union, cast
+from typing import Any, Dict, Generator, List, Optional, cast
 
 from curl_cffi.requests import Session
 
@@ -51,7 +51,7 @@ class Completions(BaseCompletions):
         timeout: Optional[int] = None,
         proxies: Optional[Dict[str, str]] = None,
         **kwargs: Any,
-    ) -> Union[ChatCompletion, Generator[ChatCompletionChunk, None, None]]:  # type: ignore
+    ) -> Any:  # type: ignore
         """
         Creates a model response for the given chat conversation.
         Mimics openai.chat.completions.create

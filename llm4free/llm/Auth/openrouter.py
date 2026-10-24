@@ -42,7 +42,7 @@ class Completions(BaseCompletions):
         tools: Optional[List[Union[Dict[str, Any], Any]]] = None,
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         **kwargs: Any,
-    ) -> Union[ChatCompletion, Generator[ChatCompletionChunk, None, None]]:
+    ) -> Any:
         payload: Dict[str, Any] = {
             "model": model,
             "messages": messages,
