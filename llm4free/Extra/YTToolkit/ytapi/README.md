@@ -13,13 +13,18 @@ YTAPI is a powerful, lightweight YouTube data extraction module within the LLM4F
 - **Playlist** - Playlist metadata and videos
 - **Search** - Search videos, channels, playlists, Shorts, live streams
 
-### New Classes
+### Additional Classes
 
 - **Suggestions** - YouTube search autocomplete
 - **Shorts** - YouTube Shorts detection and search
 - **Hashtag** - Videos by hashtag
 - **Captions** - Video transcripts and subtitles
 - **Extras** - Trending content by category
+
+> [!NOTE]
+> Search and extras helpers return lists of IDs (video, channel, or playlist),
+> not objects. Construct `Video`, `Channel`, or `Playlist` with an ID when you
+> need metadata.
 
 ## 📦 Installation
 
@@ -184,7 +189,7 @@ meta = channel.metadata
 print(f"Name: {meta['name']}")
 print(f"Subscribers: {meta['subscribers']}")
 
-# Get uploads
+# Get uploads (list of video IDs)
 uploads = channel.uploads(20)
 
 # Check if live

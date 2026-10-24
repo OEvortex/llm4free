@@ -39,21 +39,20 @@ LLM4Free can be deployed in multiple ways:
 # Build the image
 docker build -t llm4free-api .
 
-# Run container (interactive mode)
-docker run -it llm4free-api
+# Run the API server (the image's default command)
+docker run -p 8000:8000 llm4free-api
 
-# With API key mounted
-docker run -it \
-  -e OPENAI_API_KEY="your-api-key" \
-  llm4free-api
-
-# With port forwarding (for API server)
-docker run -it \
-  -p 8000:8000 \
-  -e OPENAI_API_KEY="your-api-key" \
-  llm4free-api \
-  llm4free-server
+# Override the default command, e.g. to inspect the CLI
+docker run --rm llm4free-api llm4free --help
 ```
+
+> [!NOTE]
+> The image's `CMD` is `python -m llm4free.server.server`, so a plain
+> `docker run llm4free-api` starts the API server. `llm4free-server` is available
+> as a console script if you want to override the command explicitly.
+> Provider API keys are **not** consumed by the HTTP server, because it only
+> registers providers whose `required_auth` flag is `False` (see
+> [Configure Providers](#configure-providers)).
 
 ### Build Custom Image
 
@@ -87,46 +86,35 @@ Create `docker-compose.yml`:
 version: '3.8'
 
 services:
-  llm4free:
+  llm4free-api:
     build: .
-    container_name: llm4free-app
+    container_name: llm4free-api
     environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - GROQ_API_KEY=${GROQ_API_KEY}
+      - LLM4FREE_HOST=0.0.0.0
+      - LLM4FREE_PORT=8000
+      - LLM4FREE_WORKERS=1
+      - LLM4FREE_LOG_LEVEL=info
     volumes:
+      - ./logs:/app/logs
       - ./data:/app/data
     ports:
       - "8000:8000"
-    stdin_open: true
-    tty: true
-
-  llm4free-server:
-    build: .
-    container_name: llm4free-api
-    command: llm4free-server --host 0.0.0.0 --port 8001
-    environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - GROQ_API_KEY=${GROQ_API_KEY}
-    ports:
-      - "8001:8001"
-    depends_on:
-      - llm4free
 ```
+
+> [!NOTE]
+> The repository already ships a `docker-compose.yml` with `default`,
+> `production`, `development`, `nginx`, and `monitoring` profiles — see
+> [DOCKER.md](DOCKER.md#service-profiles). The snippet above is a minimal
+> equivalent.
 
 ### Run Compose Stack
 
 ```bash
-# Create .env file with your API keys
-cat > .env << EOF
-OPENAI_API_KEY=your-api-key-here
-GROQ_API_KEY=your-groq-key-here
-EOF
-
-# Start services
+# Start the server
 docker-compose up -d
 
 # View logs
-docker-compose logs -f llm4free-server
+docker-compose logs -f llm4free-api
 
 # Stop services
 docker-compose down
@@ -137,19 +125,17 @@ docker-compose down
 > [!WARNING]
 > The current server implementation does **not** support API key authentication
 > (`auth_required = False` in `ServerConfig`). Authentication is disabled by default
-> and there is no `--api-key` CLI flag. This section is kept for reference; if you
-> need auth, put a reverse proxy (nginx/Caddy/Traefik) in front of the server.
+> and there is no `--api-key` CLI flag. If you need auth, put a reverse proxy
+> (nginx/Caddy/Traefik) in front of the server.
 
 ```yaml
 services:
-  llm4free-server:
+  llm4free-api:
     build: .
     command: >
       llm4free-server
       --host 0.0.0.0
       --port 8001
-    environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
     ports:
       - "8001:8001"
 ```
@@ -190,14 +176,23 @@ llm4free-server --default-provider GROQ
 
 ### Configure Providers
 
-Providers are discovered dynamically at startup. Set API keys as environment variables:
+Providers are discovered at startup from `llm4free/llm/__init__.py`. The server
+registers **only providers with `required_auth = False`** — for example
+`ChatGPT`, `Gemini`, `Toolbaz`, `AkashGPT`, `IBM`, `GptFree`, `Netwrck`,
+`TypliAI`, and `PiAI`.
+Providers that need API keys (`Groq`, `OpenRouter`, `TogetherAI`, `DeepInfra`,
+`AI4Chat`, `TextPollinations`, `HuggingFace`, etc.) are **not** registered and
+cannot be selected through HTTP, regardless of which environment variables you
+set.
 
-```bash
-export OPENAI_API_KEY="sk-your-openai-key"
-export GROQ_API_KEY="gsk_your-groq-key"
-export COHERE_API_KEY="co_your-cohere-key"
-export GEMINI_API_KEY="your-gemini-key"
-```
+Use `Provider/Model` identifiers (or a bare model name, which is resolved against
+`LLM4FREE_DEFAULT_PROVIDER`):
+
+| Provider | Example model identifier |
+|----------|--------------------------|
+| `ChatGPT` | `ChatGPT/GPT-6-free` |
+| `Gemini` | `Gemini/gemini-3.6-flash` |
+| `Toolbaz` | `Toolbaz/toolbaz-v5` |
 
 > [!NOTE]
 > There is no `llm4free_config.json` or `llm4free.yaml` file format read by the server.
@@ -211,13 +206,13 @@ from openai import OpenAI
 
 # Point to your LLM4Free server
 client = OpenAI(
-    api_key="any-key-or-gsk_...",
+    api_key="unused",  # the server does not authenticate requests
     base_url="http://localhost:8000/v1"
 )
 
 # Use exactly like OpenAI
 response = client.chat.completions.create(
-    model="GROQ",
+    model="ChatGPT/GPT-6-free",
     messages=[
         {"role": "user", "content": "Hello"}
     ]
@@ -233,9 +228,8 @@ print(response.choices[0].message.content)
 ```bash
 curl http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR-API-KEY" \
   -d '{
-    "model": "GROQ",
+    "model": "ChatGPT/GPT-6-free",
     "messages": [
       {"role": "user", "content": "Hello"}
     ]
@@ -245,8 +239,7 @@ curl http://localhost:8000/v1/chat/completions \
 #### List Models
 
 ```bash
-curl http://localhost:8000/v1/models \
-  -H "Authorization: Bearer YOUR-API-KEY"
+curl http://localhost:8000/v1/models
 ```
 
 #### Health Check
@@ -261,33 +254,27 @@ curl http://localhost:8000/monitor/health
 
 ### API Keys
 
-Set environment variables:
+The HTTP server only registers no-auth providers, so provider API keys have no
+effect there. Keys matter only when you use the Python `Client` or import a
+provider class directly. LLM4Free does **not** read keys from environment
+variables; pass them explicitly:
 
-```bash
-# Linux/macOS
-export OPENAI_API_KEY="sk-..."
-export GROQ_API_KEY="gsk_..."
-export COHERE_API_KEY="..."
+```python
+from llm4free import Client
+from llm4free.llm.Auth.groq import Groq
 
-# Windows PowerShell
-$env:OPENAI_API_KEY = "sk-..."
-$env:GROQ_API_KEY = "gsk_..."
+# One key applied to whichever auth-required provider is selected
+client = Client(api_key="gsk_...", drop_auth_providers=False)
 
-# Windows CMD
-set OPENAI_API_KEY=sk-...
+# Or configure a single provider directly
+groq = Groq(api_key="gsk_...")
 ```
 
-### Using .env File
+### Server Environment Variables
 
-Create `.env`:
+Create a `.env` file for the **server** settings:
 
 ```bash
-# AI Provider Keys
-OPENAI_API_KEY=sk-your-openai-key
-GROQ_API_KEY=gsk_your-groq-key
-COHERE_API_KEY=co_your-cohere-key
-GEMINI_API_KEY=your-gemini-key
-
 # Server Configuration
 LLM4FREE_HOST=0.0.0.0
 LLM4FREE_PORT=8000
@@ -297,22 +284,21 @@ LLM4FREE_DEBUG=false
 Load with:
 
 ```bash
-# Shell
+# Shell (the server does not parse .env itself)
 set -a
 source .env
 set +a
 
 # Or in Docker Compose
 environment:
-  - OPENAI_API_KEY=${OPENAI_API_KEY}
   - LLM4FREE_PORT=${LLM4FREE_PORT:-8000}
 ```
 
 > [!NOTE]
 > The server does **not** read `REQUEST_TIMEOUT`, `STREAM_TIMEOUT`, or any
 > `python-dotenv`-loaded variables. Only `LLM4FREE_*` prefixed variables (and a few
-> bare aliases like `PORT`, `DEBUG`, `BASE_URL`) are honored. See
-> [docs/DOCKER.md](DOCKER.md) for the full list.
+> bare aliases like `PORT`, `DEBUG`, `BASE_URL`, `DEFAULT_PROVIDER`) are honored.
+> See [docs/DOCKER.md](DOCKER.md) for the full list.
 
 ### Configuration File
 
@@ -399,9 +385,13 @@ server {
 # Check if server is running
 curl http://localhost:8000/monitor/health
 
-# In Docker
-docker run --healthcheck=CMD curl -f http://localhost:8000/monitor/health
+# Inspect the built-in container HEALTHCHECK
+docker inspect --format='{{.State.Health.Status}}' llm4free-api
 ```
+
+> [!NOTE]
+> The image already defines a `HEALTHCHECK` that calls `/monitor/health`, so no
+> extra `docker run` flag is needed.
 
 > [!NOTE]
 > The health endpoint is `/monitor/health` (not `/health`). It returns
@@ -500,7 +490,7 @@ spec:
     spec:
       containers:
       - name: llm4free
-        build: .
+        image: llm4free-api:latest
         ports:
         - containerPort: 8000
         

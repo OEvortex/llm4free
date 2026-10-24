@@ -2,100 +2,75 @@
 
 ## Base Class
 
-All providers inherit from `OpenAICompatibleProvider` which provides a standard interface.
-
-### Interface
-
-```python
-class OpenAICompatibleProvider:
-    AVAILABLE_MODELS = []  # List of available models
-    
-    def chat(self, messages, stream=False):
-        """Send chat messages and get response."""
-        pass
-```
-
-## Provider Management
-
-### Initialize Providers
-
-```python
-from llm4free.server.providers import initialize_provider_map
-
-# Discover and register all available providers
-initialize_provider_map()
-```
-
-### Resolve Provider
-
-```python
-from llm4free.server.providers import resolve_provider_and_model
-
-# Resolve provider class and model name from identifier
-provider_class, model_name = resolve_provider_and_model("AI4Chat/gpt-4o")
-```
-
-### Get Provider Instance
-
-```python
-from llm4free.server.providers import get_provider_instance
-
-# Get cached provider instance
-provider = get_provider_instance(provider_class)
-```
-
-## Available Providers
-
-### Free Providers (No API Key Required)
-
-| Provider | Models | Features |
-|----------|--------|----------|
-| ChatGPT | 15+ | GPT models |
-| HeckAI | 9+ | DeepSeek, Gemini |
-| LLMChat | 40+ | Cloudflare models |
-| Toolbaz | 20+ | Various models |
-| FreeAI | 30+ | Anthropic, OpenAI |
-
-### Paid Providers (API Key Required)
-
-| Provider | Models | Features |
-|----------|--------|----------|
-| OpenAI | GPT-4o, o1, etc. | Official OpenAI |
-| Anthropic | Claude 3.5, etc. | Official Anthropic |
-| Google | Gemini 2.0, etc. | Official Google |
-
-## Creating Custom Providers
-
-### Step 1: Create Provider Class
+Every chat provider derives from `OpenAICompatibleProvider` and exposes the
+same OpenAI-style surface: `provider.chat.completions.create(...)`.
 
 ```python
 from llm4free.llm.base import OpenAICompatibleProvider
 
 class MyProvider(OpenAICompatibleProvider):
-    AVAILABLE_MODELS = ["model-1", "model-2"]
-    required_auth = True  # or False for free providers
-    
-    def __init__(self, api_key=None):
-        self.api_key = api_key
-    
-    def chat(self, messages, stream=False, **kwargs):
-        # Implement chat logic
-        response = self._call_api(messages, **kwargs)
-        return response
+    AVAILABLE_MODELS = ["my-model"]
+    required_auth = False        # True if an API key is mandatory
+    supports_tools = False       # True for native tool calling
+
+    def __init__(self, api_key=None, proxies=None):
+        super().__init__(proxies=proxies)
+        self.chat = MyChat(self)
+
+    @property
+    def models(self):
+        from llm4free.llm.base import SimpleModelList
+        return SimpleModelList(self.AVAILABLE_MODELS)
 ```
 
-### Step 2: Register Provider
+The `models` property must return an object with a `.list()` method
+(`SimpleModelList` is the built-in helper). `AVAILABLE_MODELS` is the static
+fallback that the client and server use for model resolution.
+
+When `supports_tools = False`, `OpenAICompatibleProvider` transparently wraps
+`chat.completions.create()` and runs a prompt-based tool loop for you, so the
+provider does not need to understand OpenAI `tools` payloads.
+
+## Discovering Providers
 
 ```python
-# In your provider's __init__.py
-from llm4free.server.providers import AppConfig
+from llm4free import Client
 
-AppConfig.provider_map["MyProvider"] = MyProvider
-
-# Register models
-for model in MyProvider.AVAILABLE_MODELS:
-    AppConfig.provider_map[f"MyProvider/{model}"] = MyProvider
+Client.get_chat_providers()        # all chat providers
+Client.get_free_chat_providers()   # chat providers with required_auth = False
+Client.get_image_providers()       # all text-to-image providers
+Client.get_free_image_providers()
+Client.get_tts_providers()         # all text-to-speech providers
+Client.get_free_tts_providers()
 ```
+
+### Free Chat Providers (no API key)
+
+`AkashGPT`, `ChatGPT`, `ChatJimmy`, `Gemini`, `GptFree`, `IBM`, `K2Think`,
+`Miklium`, `Netwrck`, `OllamaSwarm`, `PiAI`, `Toolbaz`, `TypliAI`, `WiseCat`.
+
+### Authenticated Chat Providers
+
+`AI4Chat`, `Cerebras`, `DeepAI`, `DeepInfra`, `Groq`, `HuggingFace`, `Nvidia`,
+`OpenRouter`, `Sambanova`, `TextPollinations`, `TogetherAI`, `TwoAI`, `Upstage`,
+`Zenmux`.
+
+> [!NOTE]
+> These providers set `required_auth = True`. The unified `Client` excludes them
+> by default (`drop_auth_providers=True`), even when `api_key` is supplied. Pass
+> `drop_auth_providers=False` to include them.
+
+### Image Providers (TTI)
+
+`BingImageAI`, `Lexica`, `MagicHourAI`, `MagicStudioAI`, `MiragicAI`,
+`NoLoginTool`, `OneFreeAI`, `PerchanceAI`, `PollinationsAI`, `RaphaelAI`,
+`StableHordeAI`, `TogetherImage`, `VisualGPT`.
+
+### Speech Providers (TTS)
+
+`DeepgramTTS`, `ElevenlabsTTS`, `KittenTTS`, `KyutaiTTS`, `LuxTTS`, `MurfAITTS`,
+`OpenAIFMTTS`, `ParlerTTS`, `PocketTTS`, `QwenTTS`, `SherpaTTS`, `StreamElements`,
+`TTSAI`, `TTSOpenTTS`, `XLNKTTS`.
 
 ## Provider Selection
 
@@ -105,21 +80,123 @@ for model in MyProvider.AVAILABLE_MODELS:
 from llm4free import Client
 
 client = Client()
-# Client automatically selects best available provider
 response = client.chat.completions.create(
-    model="gpt-4o",  # Mapped to available provider
-    messages=[{"role": "user", "content": "Hello!"}]
+    model="auto",
+    messages=[{"role": "user", "content": "Hello!"}],
 )
 ```
 
-### Manual Selection
+The client tries the best-matching provider first and falls back to others if
+it fails.
+
+### Pinning a Provider
+
+Use a `provider/model` identifier or pass the provider class directly:
 
 ```python
-from llm4free import AI4Chat
+from llm4free import Client
+from llm4free.llm.gemini import Gemini
 
-# Use specific provider (free API key from https://www.ai4chat.co/api)
-ai = AI4Chat(api_key="...")
-response = ai.chat("Hello!")
+client = Client()
+
+# Via model identifier
+response = client.chat.completions.create(
+    model="Gemini/gemini-3.6-flash",
+    messages=[{"role": "user", "content": "Hello!"}],
+)
+
+# Via provider class
+response = client.chat.completions.create(
+    model="gemini-3.6-flash",
+    provider=Gemini,
+    messages=[{"role": "user", "content": "Hello!"}],
+)
+```
+
+### Direct Provider Usage
+
+```python
+from llm4free.llm.gemini import Gemini
+
+ai = Gemini()
+response = ai.chat.completions.create(
+    model="gemini-3.6-flash",
+    messages=[{"role": "user", "content": "Hello!"}],
+)
+print(response.choices[0].message.content)
+```
+
+## Server Provider Map
+
+The API server uses a separate registry built at startup.
+
+### Initialize Providers
+
+```python
+from llm4free.server.providers import initialize_provider_map
+
+initialize_provider_map()  # registers free chat providers and their models
+```
+
+Only providers with `required_auth = False` are registered. Equivalent helpers
+exist for the other modalities: `initialize_tti_provider_map()` and
+`initialize_tts_provider_map()`.
+
+### Resolve Provider
+
+```python
+from llm4free.server.providers import resolve_provider_and_model
+
+provider_class, model_name = resolve_provider_and_model("Gemini/gemini-3.6-flash")
+```
+
+The server resolver is strict: use `Provider/Model` explicitly, or a bare model
+name, which is resolved against `AppConfig.default_provider`. It does not support
+`"auto"`, fuzzy matching, or failover. Image and speech identifiers are resolved
+by `resolve_tti_provider_and_model()` and `resolve_tts_provider_and_model()`.
+
+### Get Provider Instance
+
+```python
+from llm4free.server.providers import get_provider_instance
+
+provider = get_provider_instance(provider_class)  # cached per provider class
+```
+
+## Registering a Custom Provider
+
+Implement the class, then expose it from `llm4free/llm/__init__.py` so that the
+client registries and the server provider map can discover it.
+
+```python
+# llm4free/llm/myprovider.py
+from llm4free.llm.base import BaseChat, BaseCompletions, OpenAICompatibleProvider, SimpleModelList
+
+
+class Completions(BaseCompletions):
+    def __init__(self, client):
+        self._client = client
+
+    def create(self, *, model, messages, stream=False, **kwargs):
+        ...  # return a ChatCompletion or a generator of ChatCompletionChunk
+
+
+class Chat(BaseChat):
+    def __init__(self, client):
+        self.completions = Completions(client)
+
+
+class MyProvider(OpenAICompatibleProvider):
+    AVAILABLE_MODELS = ["my-model"]
+    required_auth = False
+
+    def __init__(self, api_key=None, proxies=None):
+        super().__init__(proxies=proxies)
+        self.chat = Chat(self)
+
+    @property
+    def models(self):
+        return SimpleModelList(self.AVAILABLE_MODELS)
 ```
 
 ## Provider Configuration
@@ -127,23 +204,12 @@ response = ai.chat("Hello!")
 ### API Keys
 
 ```python
-# Via JSON file
-client = Client(api_keys_file="keys.json")
+from llm4free import Client
 
-# Via environment
-import os
-os.environ["OPENAI_API_KEY"] = "sk-..."
+# Pass one key to auth-required providers
+client = Client(api_key="sk-...", drop_auth_providers=False)
 
-# Via constructor
-client = Client(api_key="sk-...")
-```
-
-### keys.json Format
-
-```json
-{
-    "OpenAI": "sk-...",
-    "Anthropic": "sk-ant-...",
-    "Google": "AIza..."
-}
+# Or pass credentials straight to a provider class
+from llm4free.llm.Auth.groq import Groq
+ai = Groq(api_key="gsk-...")
 ```

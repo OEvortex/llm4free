@@ -19,7 +19,7 @@ LitAgent is a high-performance, enterprise-grade user agent generation and manag
 - **🌐 Browser Broadness**: Pre-configured with the latest signatures for Chrome, Firefox, Safari, Edge, Opera, Brave, and Vivaldi.
 - **🔄 Smart Rotation**: Built-in mechanisms for IP and proxy rotation.
 - **🕰️ Auto-Refresh**: Keep your agent pool fresh with automatic background updates.
-- **🧵 Thread-Safe**: Fully supports multi-threaded application environments.
+- **🧵 Optional Thread Safety**: Enable a shared `RLock` with `LitAgent(thread_safe=True)` when using one instance across threads.
 - **📊 Usage Analytics**: Track your requests and monitor browser/device distribution.
 
 </details>
@@ -57,7 +57,8 @@ pip install git+https://github.com/OEvortex/LLM4Free.git
 from llm4free import LitAgent
 
 # Create a LitAgent instance
-agent = LitAgent()
+agent = LitAgent()          # thread_safe=False by default
+# agent = LitAgent(thread_safe=True)  # serialize shared-state updates
 
 # Get a random user agent
 ua = agent.random()
@@ -166,6 +167,7 @@ agent.auto_refresh(interval_minutes=15)
 
 | Method | Description |
 |--------|-------------|
+| `LitAgent(thread_safe=False)` | Creates an agent pool and simulated IP pool; set `thread_safe=True` to enable locking. |
 | `random()` | Returns a random user agent from the pool. |
 | `browser(name)` | Returns an agent for the specified browser name. |
 | `mobile() / desktop() / tablet()` | Returns an agent for the specified device type. |
@@ -188,8 +190,8 @@ agent.auto_refresh(interval_minutes=15)
 
 ## 🌈 Supported Versions
 
-- **Python**: 3.8+
-- **OS**: Windows, macOS, Linux, Android, iOS
+- **Python**: 3.10+ (same as the rest of the package)
+- **OS**: Windows, macOS, Linux, Android, iOS (the generated UA strings cover these platforms)
 
 ## 🤝 Contributing
 

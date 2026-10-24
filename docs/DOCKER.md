@@ -19,10 +19,10 @@ uv run llm4free-server
 This guide covers running the LLM4Free OpenAI-compatible API server in Docker. The image is built from the repository `Dockerfile` (a multi-stage build) and configured through the `docker-compose.yml` profiles. The server runs as a non-root user and exposes a health check at `/monitor/health`.
 
 > [!NOTE]
-> All environment variables below are read by [`llm4free/server/server.py`](../llm4free/server/server.py) and [`llm4free/server/config.py`](../llm4free/server/config.py). Variables not read by the server (even if referenced in older docs) are listed separately and are **not** currently honored.
+> All environment variables below are read by [`llm4free/server/server.py`](../llm4free/server/server.py) and [`llm4free/server/config.py`](../llm4free/server/config.py), except the two marked "not read". Variables not read by the server (even if referenced in older docs) are listed separately and are **not** currently honored.
 
 > [!NOTE]
-> The `llm4free-server` image exposes the same model-resolution semantics as the Python `Client`: send `model="auto"` to let the server pick any working provider/model, or pin a specific one with `model="Provider/Model"` (e.g. `model="DeepInfra/Meta-Llama-3.1-8B-Instruct"`). This matches the auto-failover behavior documented in [client.md](client.md).
+> The server uses its own strict model resolver, which is **not** the Python `Client` resolver. Send `model="Provider/Model"` (e.g. `model="Gemini/gemini-3.6-flash"`) or a bare model name (resolved against `LLM4FREE_DEFAULT_PROVIDER`). `model="auto"`, fuzzy matching, and failover are `Client`-only.
 
 ## Table of Contents
 
@@ -94,8 +94,8 @@ The server reads the following variables at runtime. Where a value is shown as "
 | `LLM4FREE_LOG_LEVEL` | `info` | Log level: `debug`, `info`, `warning`, `error`, `critical` |
 | `LLM4FREE_DEBUG` | `false` | Enable debug mode (fallback: `DEBUG`) |
 | `LLM4FREE_REQUEST_LOGGING` | `true` | Enable request logging |
-| `LLM4FREE_DATA_DIR` | `/app/data` | Data directory for the JSON database |
-| `LLM4FREE_CORS_ORIGINS` | `*` | CORS allowed origins |
+| `LLM4FREE_DATA_DIR` | `/app/data` | Docker volume path (not read by the server; no persistence code uses it) |
+| `LLM4FREE_CORS_ORIGINS` | `*` | Set in the image (not read; CORS middleware hardcodes `*`) |
 | `LLM4FREE_DEFAULT_PROVIDER` | `ChatGPT` | Default LLM provider (fallback: `DEFAULT_PROVIDER`) |
 | `LLM4FREE_BASE_URL` | (none) | Base URL for the API (fallback: `BASE_URL`) |
 
@@ -141,7 +141,9 @@ The `docker-compose.yml` defines these profiles:
 - **monitoring** — Optional Prometheus monitoring (requires your own `prometheus.yml`).
 
 > [!NOTE]
-> The Docker image does **not** include a MongoDB service profile. Data is persisted to the JSON-backed `LLM4FREE_DATA_DIR` volume.
+> The Docker image does **not** include a MongoDB service profile. The
+> `LLM4FREE_DATA_DIR` volume is mounted, but the current server has no
+> persistence layer that reads or writes it.
 
 ---
 
@@ -163,7 +165,8 @@ The health endpoint is defined in [`llm4free/server/routes.py`](../llm4free/serv
 - Minimal runtime dependencies (Python 3.11-slim)
 - Security-hardened container settings (`no-new-privileges`)
 - Writable, volume-mounted `/app/logs` and `/app/data` directories
-- CORS controlled via `LLM4FREE_CORS_ORIGINS`
+- CORS is currently hardcoded to allow all origins. `LLM4FREE_CORS_ORIGINS` is
+  set in the image but is **not** read by the server, so it cannot restrict origins.
 
 > [!WARNING]
 > Because authentication is disabled by default, do **not** expose the server to untrusted networks without adding your own auth/reverse-proxy layer.

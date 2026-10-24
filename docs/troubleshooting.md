@@ -128,7 +128,7 @@ client = Groq(api_key=api_key.strip())  # Remove whitespace
 ```
 
 > [!NOTE]
-> Free providers (`HeckAI`, `ArtingAI`) require no API key. If you only need basic chat, prefer them to avoid auth issues entirely.
+> Free providers such as `ChatGPT`, `Gemini`, `Toolbaz`, `GptFree`, and `IBM` require no API key. If you only need basic chat, prefer them to avoid auth issues entirely.
 
 ### "API key not provided"
 
@@ -146,15 +146,16 @@ import os
 os.environ["GROQ_API_KEY"] = "your-key-here"
 client = Groq(api_key=os.environ["GROQ_API_KEY"])
 
-# 3. Set in your shell
-# Linux/macOS: export GROQ_API_KEY=your-key-here
-# Windows PowerShell: $env:GROQ_API_KEY="your-key-here"
+# 3. Shell environment variables are only a source for os.environ;
+#    LLM4Free does not read provider keys from the environment itself.
+#    Linux/macOS: export GROQ_API_KEY=your-key-here
+#    Windows PowerShell: $env:GROQ_API_KEY="your-key-here"
 
 # 4. For providers that don't require auth
-from llm4free.llm.heckai import HeckAI
-ai = HeckAI()  # No key needed
+from llm4free.llm.chatgpt import ChatGPT
+ai = ChatGPT()  # No key needed
 response = ai.chat.completions.create(
-    model="auto",
+    model="GPT-6-free",
     messages=[{"role": "user", "content": "Hello"}],
 )
 print(response.choices[0].message.content)
@@ -209,7 +210,7 @@ client = Groq(api_key="key", timeout=60)  # 60 seconds instead of default
 # 3. Use a retry mechanism
 from llm4free.AIutel import retry
 
-@retry(max_attempts=3, delay=2)
+@retry(retries=3, delay=2)
 def safe_chat(prompt):
     client = Groq(api_key="key")
     return client.chat.completions.create(
@@ -241,9 +242,13 @@ response = client.chat.completions.create(
     messages=[{"role": "user", "content": "Hello"}],
 )
 
-# 3. Use a proxy/VPN if certain services are blocked
-client = Groq(
+# 3. Use a proxy/VPN if certain services are blocked.
+#    Groq's constructor does not take a proxies argument; the unified
+#    Client applies proxies to every provider it initializes.
+from llm4free import Client
+client = Client(
     api_key="key",
+    drop_auth_providers=False,
     proxies={
         "http": "http://proxy.example.com:8080",
         "https": "http://proxy.example.com:8080",
@@ -285,13 +290,13 @@ print("- Groq: https://console.groq.com/docs/rate-limits")
 
 ```python
 # 1. Check method names (Python is case-sensitive)
-from llm4free.llm.heckai import HeckAI
+from llm4free.llm.chatgpt import ChatGPT
 
-client = HeckAI()
+client = ChatGPT()
 
 # Good - correct OpenAI-compatible interface
 response = client.chat.completions.create(
-    model="auto",
+    model="GPT-6-free",
     messages=[{"role": "user", "content": "Hello"}],
 )
 
@@ -319,7 +324,7 @@ help(client.chat.completions.create)
 > [!WARNING]
 > The legacy import paths `llm4free.Provider.Openai_comp.*` and top-level names like `Meta`, `GROQ`, `OpenAI` do **not** exist in this version. Use the verified paths below:
 >
-> - `from llm4free.llm.heckai import HeckAI`
+> - `from llm4free.llm.chatgpt import ChatGPT`
 > - `from llm4free.llm.Auth.groq import Groq`
 > - `from llm4free.client import Client`
 > - `from llm4free import DuckDuckGoSearch`
@@ -431,12 +436,12 @@ except Exception as e:
 # 1. Check network speed
 import time
 
-from llm4free.llm.heckai import HeckAI
-client = HeckAI()
+from llm4free.llm.gemini import Gemini
+client = Gemini()
 
 start = time.time()
 response = client.chat.completions.create(
-    model="google/gemini-2.5-flash-preview",
+    model="gemini-3.6-flash",
     messages=[{"role": "user", "content": "What is AI?"}],
 )
 duration = time.time() - start
@@ -470,11 +475,11 @@ response = client.chat.completions.create(
 
 ```python
 # 1. Process streaming chunks and discard (don't accumulate)
-from llm4free.llm.heckai import HeckAI
-client = HeckAI()
+from llm4free.llm.chatgpt import ChatGPT
+client = ChatGPT()
 
 for chunk in client.chat.completions.create(
-    model="auto",
+    model="GPT-6-free",
     messages=[{"role": "user", "content": "Long prompt"}],
     stream=True,
 ):
@@ -506,7 +511,7 @@ for i in range(0, len(prompts), batch_size):
 
 **A:** Depends on your needs:
 
-- **Free, no API key:** `HeckAI`, `ArtingAI` (in `llm4free.llm`)
+- **Free, no API key:** `ChatGPT`, `Gemini`, `Toolbaz`, `GptFree`, `IBM` (in `llm4free.llm`)
 - **Fast and affordable:** `Groq` (free tier available, in `llm4free.llm.Auth`)
 - **Open models:** `DeepInfra`, `TogetherAI` (auth required)
 - **Multi-model router:** `OpenRouter` (auth required)
@@ -533,14 +538,14 @@ Or implement manual fallback:
 ```python
 def chat_with_fallback(prompt):
     providers = [
-        ("Groq", lambda: __import__("llm4free.llm.Auth.groq", fromlist=["Groq"]).Groq(api_key="key")),
-        ("HeckAI", lambda: __import__("llm4free.llm.heckai", fromlist=["HeckAI"]).HeckAI()),
+        ("Groq", lambda: __import__("llm4free.llm.Auth.groq", fromlist=["Groq"]).Groq(api_key="key"), "llama-3.3-70b-versatile"),
+        ("ChatGPT", lambda: __import__("llm4free.llm.chatgpt", fromlist=["ChatGPT"]).ChatGPT(), "GPT-6-free"),
     ]
-    for name, factory in providers:
+    for name, factory, model in providers:
         try:
             client = factory()
             return client.chat.completions.create(
-                model="auto",
+                model=model,
                 messages=[{"role": "user", "content": prompt}],
             ).choices[0].message.content
         except Exception as e:
@@ -599,10 +604,10 @@ print(response.choices[0].message.content)
 ```python
 prompt = "你好 مرحبا שלום"  # Multiple languages
 
-from llm4free.llm.heckai import HeckAI
-client = HeckAI()
+from llm4free.llm.chatgpt import ChatGPT
+client = ChatGPT()
 response = client.chat.completions.create(
-    model="auto",
+    model="GPT-6-free",
     messages=[{"role": "user", "content": prompt}],
 )
 print(response.choices[0].message.content)
@@ -616,11 +621,11 @@ print(response.choices[0].message.content)
 2. Create a minimal reproducible example:
 
 ```python
-from llm4free.llm.heckai import HeckAI
+from llm4free.llm.chatgpt import ChatGPT
 
-client = HeckAI()
+client = ChatGPT()
 response = client.chat.completions.create(
-    model="auto",
+    model="GPT-6-free",
     messages=[{"role": "user", "content": "Simple test"}],
 )
 print(response.choices[0].message.content)

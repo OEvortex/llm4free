@@ -118,8 +118,9 @@ for _ in range(5):
         )
 ```
 
-A complete, runnable version is in
-[`examples/tool_calling.py`](../examples/tool_calling.py).
+A minimal request that exposes the tool to the model is in
+[`examples/tool_calling.py`](../examples/tool_calling.py). The loop below shows
+how to execute the tool and send the result back.
 
 ---
 
@@ -413,8 +414,8 @@ response = client.chat.completions.create(
 
 ### Full agent loop
 
-See [`examples/tool_calling.py`](../examples/tool_calling.py) for a minimal
-agent that executes tools, feeds results back, and handles bad arguments.
+The Quick Start above shows the full loop. For a minimal single-request example,
+see [`examples/tool_calling.py`](../examples/tool_calling.py).
 
 ---
 
@@ -423,8 +424,12 @@ agent that executes tools, feeds results back, and handles bad arguments.
 **The model says it has no tools or ignores them.**
 Some free providers do not follow the XML prompt. Pin a model that does:
 
-```bash
-LLM4FREE_MODEL="Gemini/gemini-3.6-flash" uv run python examples/tool_calling.py
+```python
+response = client.chat.completions.create(
+    model="Gemini/gemini-3.6-flash",
+    messages=messages,
+    tools=TOOLS,
+)
 ```
 
 Native providers such as OpenRouter avoid the issue entirely.

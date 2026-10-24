@@ -55,13 +55,13 @@ print(response.choices[0].message.content)
 
 # Or force a specific provider/model
 client.chat.completions.create(
-    model="HeckAI/google/gemini-3-flash-preview",
+    model="Gemini/gemini-3.6-flash",
     messages=[{"role": "user", "content": "Hello!"}],
 )
 ```
 
 > [!NOTE]
-> `model="auto"` resolves a working provider and model for you — no need to memorize provider names. Use `model="HeckAI/google/gemini-3-flash-preview"` to force a specific backend. `client.chat.completions.last_provider` tells you which provider was used, and `print_provider_info=True` prints it live.
+> `model="auto"` resolves a working provider and model for you — no need to memorize provider names. Use `model="Gemini/gemini-3.6-flash"` to force a specific backend. `client.chat.completions.last_provider` tells you which provider was used, and `print_provider_info=True` prints it live.
 
 > [!TIP]
 > **Why the unified Client?** Because it gives you three things for free that raw provider imports do not: (1) **auto-failover** — if one provider is down or rate-limited, the client retries across others; (2) **`model="auto"`** — you never have to hard-code a working provider/model; and (3) **`model="ProviderName/ModelName"`** — one consistent syntax to force any backend. It also unifies chat, image, and audio behind a single object. The raw provider examples below are still valid, but the `Client` is the recommended path for most apps.
@@ -71,18 +71,18 @@ client.chat.completions.create(
 Prefer a direct provider import? Every provider implements the OpenAI-compatible interface. The `Client` above is recommended because it adds auto-failover and model resolution automatically.
 
 ```python
-from llm4free.llm.heckai import HeckAI
+from llm4free.llm.gemini import Gemini
 
-client = HeckAI()
+client = Gemini()
 response = client.chat.completions.create(
-    model="google/gemini-3-flash-preview",
+    model="gemini-3.6-flash",
     messages=[{"role": "user", "content": "What is Python?"}],
 )
 print(response.choices[0].message.content)
 ```
 
 > [!NOTE]
-> `HeckAI` is a no-auth provider. Import it from `llm4free.llm.heckai` — the older `llm4free.Provider.Openai_comp.heckai` path no longer exists.
+> `Gemini` is a no-auth provider. Import it from `llm4free.llm.gemini`.
 
 ### Web search
 
@@ -92,7 +92,7 @@ from llm4free import DuckDuckGoSearch
 engine = DuckDuckGoSearch()
 results = engine.text("AI trends 2025", max_results=5)
 for r in results:
-    print(r.title, r.url)
+    print(r.title, r.href)
 ```
 
 ### Image generation
@@ -101,7 +101,8 @@ for r in results:
 from llm4free.TTI import PollinationsAI
 
 generator = PollinationsAI()
-image = generator.generate_image("Beautiful sunset over mountains")
+image = generator.images.create(model="flux", prompt="Beautiful sunset over mountains")
+print(image.data[0].url)
 ```
 
 **[→ Full Getting Started Guide](getting-started.md)**
@@ -152,9 +153,6 @@ image = generator.generate_image("Beautiful sunset over mountains")
 
 - **[LitAgent](litagent.md)** — User-agent & IP rotation
 - **[LitPrinter](litprinter.md)** — Advanced debug output
-- **[ZeroArt](zeroart.md)** — ASCII art generation
-- **[GGUF Converter](gguf.md)** — Model format conversion
-- **[Weather Utils](weather.md)** — Weather data retrieval
 - **[Git API](gitapi.md)** — GitHub integration helpers
 - **[Scout](scout.md)** — HTML parser & web crawler
 - **[Awesome Prompts](awesome-prompts.md)** — Curated system prompts
@@ -169,8 +167,8 @@ LLM4Free supports **40+ AI providers** plus multiple search engines and media mo
 
 | Category | Examples |
 |----------|----------|
-| **Free (no auth)** | HeckAI, ArtingAI, FreeAI, WiseCat, ExaAI, Netwrck, and 30+ more |
-| **Authenticated** | Groq, DeepInfra, IBM, OpenRouter, HuggingFace, Sambanova, TogetherAI, AI4Chat (free key at ai4chat.co/api) |
+| **Free (no auth)** | Gemini, Toolbaz, ChatGPT, GptFree, AkashGPT, ChatJimmy, PiAI, Netwrck, WiseCat, IBM, K2Think, Miklium, TypliAI, OllamaSwarm |
+| **Authenticated** | Groq, DeepInfra, OpenRouter, HuggingFace, Sambanova, TogetherAI, Cerebras, Nvidia, Upstage, TwoAI, Zenmux, TextPollinations |
 | **Search** | DuckDuckGo, Bing, Brave, Yahoo, Mojeek, Wikipedia, SerpBase |
 | **Images (TTI)** | PollinationsAI, TogetherImage, StableHordeAI, Lexica, MagicStudioAI, PerchanceAI |
 | **Voice (TTS)** | ElevenLabs, OpenAI FM, Qwen, Murf, Parler, Kitten, Lux, Sherpa |

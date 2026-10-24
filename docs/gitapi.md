@@ -221,29 +221,40 @@ The `Repository` class provides comprehensive access to GitHub repository data.
 
 **Methods:**
 - `get_info()` - Get basic repository information
-- `get_readme()` - Get repository README content
+- `get_readme(ref=None)` - Get repository README content (API returns base64-encoded `content`)
 - `get_license()` - Get repository license information
 - `get_topics()` - Get repository topics
-- `get_commits(sha="main", per_page=30)` - Get commit history
+- `get_commits(page=1, per_page=30, sha=None)` - Get commit history
 - `get_commit(sha)` - Get specific commit details
 - `compare(base, head)` - Compare branches
-- `get_pull_requests(state="open", per_page=30)` - Get pull requests
-- `get_issues(state="open", per_page=30)` - Get issues
-- `get_labels(per_page=30)` - Get labels
-- `get_milestones(state="open", per_page=30)` - Get milestones
-- `get_releases(per_page=30)` - Get releases
-- `get_branches(per_page=30)` - Get branches
-- `get_tags(per_page=30)` - Get tags
-- `get_contributors(per_page=30)` - Get contributors
-- `get_stargazers(per_page=30)` - Get stargazers
-- `get_watchers(per_page=30)` - Get watchers
-- `get_forks(per_page=30)` - Get forks
-- `get_contents(path="", ref="main")` - Get repository contents
+- `get_pull_requests(state="all", page=1, per_page=30)` - Get pull requests
+- `get_pull_request(pr_number)` - Get a specific pull request
+- `get_pull_request_commits(pr_number)` - Get commits in a pull request
+- `get_pull_request_files(pr_number)` - Get files changed in a pull request
+- `get_issues(state="all", page=1, per_page=30, labels=None)` - Get issues
+- `get_issue(issue_number)` - Get a specific issue
+- `get_issue_comments(issue_number)` - Get issue comments
+- `get_labels()` - Get labels
+- `get_milestones(state="all")` - Get milestones
+- `get_releases(page=1, per_page=30)` - Get releases
+- `get_release(release_id)` - Get a specific release
+- `get_latest_release()` - Get the latest release
+- `get_branches(page=1, per_page=30)` - Get branches
+- `get_branch(branch)` - Get a specific branch
+- `get_tags()` - Get tags
+- `get_contributors(page=1, per_page=30)` - Get contributors
+- `get_collaborators()` - Get collaborators
+- `get_teams()` - Get repository teams
+- `get_stargazers(page=1, per_page=30)` - Get stargazers
+- `get_watchers(page=1, per_page=30)` - Get watchers
+- `get_forks(sort="newest", page=1, per_page=30)` - Get forks
+- `get_contents(path="", ref=None)` - Get repository contents
 - `get_languages()` - Get repository languages
-- `get_events(per_page=30)` - Get repository events
-- `get_workflows(per_page=30)` - Get GitHub Actions workflows
-- `get_workflow_runs(workflow_id, per_page=30)` - Get workflow runs
-- `get_deployments(per_page=30)` - Get deployments
+- `get_events(page=1, per_page=30)` - Get repository events
+- `get_workflows()` - Get GitHub Actions workflows
+- `get_workflow_runs(workflow_id)` - Get workflow runs
+- `get_deployments()` - Get deployments
+- `get_traffic()` - Get traffic statistics
 - `get_community_profile()` - Get community profile
 - `get_code_frequency()` - Get code frequency statistics
 - `get_commit_activity()` - Get commit activity statistics
@@ -254,30 +265,30 @@ The `User` class provides access to GitHub user data.
 
 **Methods:**
 - `get_profile()` - Get user profile information
-- `get_repositories(type="owner", per_page=30)` - Get user repositories
-- `get_starred(per_page=30)` - Get starred repositories
-- `get_followers(per_page=30)` - Get followers
-- `get_following(per_page=30)` - Get following
-- `get_gists(per_page=30)` - Get user gists
-- `get_organizations(per_page=30)` - Get organizations
-- `get_public_events(per_page=30)` - Get public events
-- `get_received_events(per_page=30)` - Get received events
-- `get_keys(per_page=30)` - Get SSH keys
-- `get_gpg_keys(per_page=30)` - Get GPG keys
+- `get_repositories(page=1, per_page=30, repo_type="all")` - Get user repositories
+- `get_starred(page=1, per_page=30)` - Get starred repositories
+- `get_followers(page=1, per_page=30)` - Get followers
+- `get_following(page=1, per_page=30)` - Get following
+- `get_gists(page=1, per_page=30)` - Get user gists
+- `get_organizations()` - Get organizations
+- `get_public_events(page=1, per_page=30)` - Get public events
+- `get_received_events(page=1, per_page=30)` - Get received events
+- `get_keys()` - Get SSH keys
+- `get_gpg_keys()` - Get GPG keys
 - `get_social_accounts()` - Get social accounts
-- `get_packages(per_page=30)` - Get packages
+- `get_packages(package_type="container", page=1, per_page=30)` - Get packages
 
 ### GitSearch Class
 
 The `GitSearch` class provides GitHub search functionality.
 
 **Methods:**
-- `search_repositories(query, per_page=30)` - Search repositories by query
-- `search_users(query, per_page=30)` - Search users
-- `search_topics(query, per_page=30)` - Search topics
-- `search_commits(query, per_page=30)` - Search commits
-- `search_issues(query, per_page=30)` - Search issues/PRs
-- `search_labels(query, per_page=30)` - Search labels
+- `search_repositories(query, sort=None, order="desc", page=1, per_page=30)` - Search repositories by query
+- `search_users(query, sort=None, order="desc", page=1, per_page=30)` - Search users
+- `search_topics(query, page=1, per_page=30)` - Search topics
+- `search_commits(query, sort=None, order="desc", page=1, per_page=30)` - Search commits
+- `search_issues(query, sort=None, order="desc", page=1, per_page=30)` - Search issues/PRs
+- `search_labels(query, sort=None, order="desc", page=1, per_page=30)` - Search labels
 
 ### Gist Class
 
@@ -285,12 +296,12 @@ The `Gist` class provides access to GitHub gists.
 
 **Methods:**
 - `get(gist_id)` - Get gist by ID
-- `list_public(per_page=30)` - List public gists
-- `list_for_user(username, per_page=30)` - List user's gists
-- `get_commits(gist_id, per_page=30)` - Get gist commits
-- `get_forks(gist_id, per_page=30)` - Get gist forks
+- `list_public(since=None, page=1, per_page=30)` - List public gists
+- `list_for_user(username, since=None, page=1, per_page=30)` - List user's gists
+- `get_commits(gist_id, page=1, per_page=30)` - Get gist commits
+- `get_forks(gist_id, page=1, per_page=30)` - Get gist forks
 - `get_revision(gist_id, sha)` - Get gist revision
-- `get_comments(gist_id, per_page=30)` - Get gist comments
+- `get_comments(gist_id, page=1, per_page=30)` - Get gist comments
 
 ### Organization Class
 
@@ -298,17 +309,17 @@ The `Organization` class provides access to GitHub organization data.
 
 **Methods:**
 - `get_info()` - Get organization details
-- `get_repos(type="all", per_page=30)` - Get organization repositories
-- `get_public_members(per_page=30)` - Get public members
-- `get_events(per_page=30)` - Get organization events
+- `get_repos(repo_type="all", sort="created", direction="desc", page=1, per_page=30)` - Get organization repositories
+- `get_public_members(page=1, per_page=30)` - Get public members
+- `get_events(page=1, per_page=30)` - Get organization events
 
 ### Trending Class
 
 The `Trending` class provides access to GitHub trending data.
 
 **Methods:**
-- `get_repositories(language=None, since="daily", spoken_language_code=None)` - Get trending repositories
-- `get_developers(language=None, since="daily")` - Get trending developers
+- `get_repositories(language="", since="daily", spoken_language="")` - Get trending repositories
+- `get_developers(language="", since="daily")` - Get trending developers
 
 ## Error Handling
 
@@ -333,28 +344,32 @@ except Exception as e:
 | Exception | Description |
 |-----------|-------------|
 | `GitError` | Base exception for all GitHub API errors |
-| `RateLimitError` | Raised when hitting API rate limits |
-| `NotFoundError` | Raised when resource is not found |
-| `RequestError` | Raised for general request errors |
-| `AuthenticationError` | Raised for authentication failures |
-| `ValidationError` | Raised for invalid parameters |
+| `RateLimitError` | Raised after retries are exhausted on HTTP 429 |
+| `NotFoundError` | Raised when a resource returns HTTP 404 |
+| `RequestError` | Raised for other HTTP/network errors (including HTTP 403) |
+
+> [!NOTE]
+> The toolkit does not send an authentication token, so GitHub's unauthenticated rate limit applies. HTTP 403 (the status GitHub commonly uses for an exhausted rate limit) is surfaced as `RequestError`, not `RateLimitError`.
 
 ## Integration Guide
 
 ### With LLM4Free Providers
 
 ```python
+from llm4free import Client
 from llm4free.Extra.GitToolkit.gitapi import Repository
-from llm4free.Provider import ChatGPT
 
 # Get repository data
 repo = Repository("OE-LUCIFER", "LLM4Free")
 repo_info = repo.get_info()
 
-# Use with AI provider
-chatgpt = ChatGPT()
-response = chatgpt.ask(f"Analyze this GitHub repository: {repo_info}")
-print(response)
+# Use with the unified client (ChatGPT is a no-auth provider)
+client = Client()
+response = client.chat.completions.create(
+    model="ChatGPT/GPT-6-free",
+    messages=[{"role": "user", "content": f"Analyze this GitHub repository: {repo_info}"}],
+)
+print(response.choices[0].message.content)
 ```
 
 ### With FastAPI
@@ -535,24 +550,22 @@ if __name__ == '__main__':
 
 > [!TIP]
 > - **Rate Limits**: GitHub API has rate limits for unauthenticated requests (60 requests per hour per IP)
-> - **Authentication**: For higher limits, consider adding authentication with a GitHub token
+> - **Authentication**: Not supported by this toolkit; every request is unauthenticated. Use a separate authenticated GitHub client if you need higher limits
 > - **Error Handling**: Always wrap GitHub API calls in try-catch blocks to handle rate limits and network issues
-> - **Pagination**: Use `per_page` parameter to control the number of results returned
+> - **Pagination**: Use `page` and `per_page` parameters to control the results returned
 > - **Caching**: Consider caching results for frequently accessed data to reduce API calls
-> - **Batch Operations**: For multiple requests, consider using async patterns or batching
+> - **Batch Operations**: These helpers are synchronous; run them in a thread pool if you need concurrency
 
 ## Configuration Best Practices
 
 ```python
-# For production use with authentication
-from llm4free.Extra.GitToolkit.gitapi import Repository
+from llm4free.Extra.GitToolkit.gitapi import Repository, RateLimitError, RequestError
 
-# Initialize with authentication (if needed)
-repo = Repository("owner", "repo", token="your_github_token")
+# Repository(owner, repo) is the complete constructor - there is no token argument
+repo = Repository("owner", "repo")
 
 # Use with retry logic for resilience
 import time
-from llm4free.Extra.GitToolkit.gitapi import RateLimitError
 
 max_retries = 3
 retry_delay = 60  # seconds
@@ -561,9 +574,9 @@ for attempt in range(max_retries):
     try:
         info = repo.get_info()
         break
-    except RateLimitError:
+    except (RateLimitError, RequestError):
         if attempt < max_retries - 1:
-            print(f"Rate limited, retrying in {retry_delay} seconds...")
+            print(f"Request failed, retrying in {retry_delay} seconds...")
             time.sleep(retry_delay)
         else:
             raise
@@ -582,16 +595,14 @@ repo = Repository("OE-LUCIFER", "LLM4Free")
 commits = repo.get_commits(
     sha="main",
     per_page=50,
-    since="2023-01-01",
-    until="2023-12-31"
+    page=2
 )
 
 # Get issues with filters
 issues = repo.get_issues(
     state="open",
     labels="bug,enhancement",
-    sort="created",
-    direction="desc"
+    per_page=50
 )
 ```
 
@@ -635,6 +646,7 @@ print(json.dumps(transformed, indent=2))
 ### Integration with Other Tools
 
 ```python
+import base64
 from llm4free.Extra.GitToolkit.gitapi import Repository
 from llm4free.sanitize import sanitize_stream
 
@@ -642,9 +654,12 @@ from llm4free.sanitize import sanitize_stream
 repo = Repository("OE-LUCIFER", "LLM4Free")
 readme = repo.get_readme()
 
-# Clean and process the README content
+# The GitHub contents API returns base64-encoded content
+decoded = base64.b64decode(readme["content"]).decode("utf-8")
+
+# Split/sanitize the decoded text
 clean_content = list(sanitize_stream(
-    readme["content"],
+    decoded,
     intro_value="",
     to_json=False,
     strip_chars="\n\r\t"

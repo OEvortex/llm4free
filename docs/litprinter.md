@@ -192,9 +192,13 @@ with console.capture() as capture:
 # Get captured content
 captured_text = capture.get()
 
-# Export to files
-console.export_text("output.txt", styles=True)
-console.export_html("output.html", theme="dark")
+# Export as strings (these return data; write it yourself)
+text = console.export_text(styles=True)
+html = console.export_html(theme="dark")
+with open("output.txt", "w", encoding="utf-8") as f:
+    f.write(text)
+with open("output.html", "w", encoding="utf-8") as f:
+    f.write(html)
 ```
 
 ---
@@ -335,21 +339,24 @@ except Exception as e:
 LitPrinter comes with many built-in themes for both console and tracebacks.
 
 ### Built-in Themes
-- `TokyoNight` (Default)
-- `Cyberpunk`
-- `Dracula`
-- `Monokai`
-- `SolarizedDark`
-- `Nord`
-- `Jarvis`
-- `Neon`
+
+Theme constants live in `litprinter.styles` as uppercase style objects:
+`AUTUMN`, `CYBERPUNK`, `DRACULA`, `FOREST`, `GITHUB`, `JARVIS`, `MATERIAL`,
+`MODERN`, `MONOCHROME`, `MONOKAI`, `NEON`, `NORD`, `OCEAN`, `RETRO`, `RICH`,
+`SOLARIZED`, `SUNSET`, `SYNTHWAVE`, and `VSCODE`.
 
 ### Using Styles
 ```python
-from litprinter import TokyoNight, set_style
+from litprinter import set_style
+from litprinter.styles import CYBERPUNK
 
-set_style(TokyoNight)
+set_style(CYBERPUNK)
 ```
+
+> [!NOTE]
+> `TokyoNight` is also re-exported at the package root
+> (`from litprinter import TokyoNight`); the other themes are only available from
+> `litprinter.styles`.
 
 ---
 
@@ -394,15 +401,22 @@ uninstall()
 LitPrinter is deeply integrated into the LLM4Free ecosystem and used throughout the codebase.
 
 ### Usage in LLM4Free
-- **Provider debugging**: Used for debugging provider implementations and API calls
-- **CLI output**: Powers the rich command-line interface with styled output
-- **Search result formatting**: Formats search results with panels and styled content
-- **Error reporting**: Enhanced tracebacks for better debugging of issues
+- **Provider debugging**: Providers and utilities call `ic()` for info, warnings, and
+  errors (for example `llm4free/llm/base.py`, `llm4free/client.py`, and
+  `llm4free/server/`).
+- **CLI output**: The CLI uses the `rich` package directly (`rich.console.Console`,
+  `rich.panel.Panel`, `rich.table.Table`), **not** LitPrinter.
+- **Search result formatting**: Also handled by `rich` in the CLI; LitPrinter is not
+  involved.
+- **Error reporting**: LitPrinter ships enhanced tracebacks, but LLM4Free does not
+  install a global traceback hook automatically.
 
 ### Benefits of Integration
-- **Unified styling**: Consistent look and feel across all LLM4Free components
-- **Zero dependencies**: No need to install separate debugging libraries
-- **Enhanced debugging**: Better error messages and variable inspection throughout the ecosystem
+- **Consistent logging**: `ic()` output shares one configuration across modules.
+- **Single dependency**: `litprinter` is already a runtime dependency, so no extra
+  package is needed to use `ic()`.
+- **Enhanced debugging**: Pretty-printed values and configurable prefixes make
+  provider failures easier to inspect.
 
 ---
 
@@ -444,16 +458,19 @@ LitPrinter is deeply integrated into the LLM4Free ecosystem and used throughout 
 
 ## 🔧 Dependencies
 
-- **Pygments** (optional): Syntax highlighting for tracebacks and code formatting
-- **colorama** (Windows): Cross-platform terminal color support
-- **Standard library**: `sys`, `os`, `inspect`, `pprint`, `datetime`
+LitPrinter 0.3.3 declares these required dependencies:
+
+- **Pygments**: Syntax highlighting for tracebacks and code formatting
+- **colorama**: Cross-platform terminal color support
+- **executing** and **asttokens**: Local-variable rendering in enhanced tracebacks
+
+It also uses standard-library modules such as `sys`, `os`, `inspect`, and `pprint`.
 
 ---
 
 ## 🌈 Supported Python Versions
 
-- Python 3.6+
-- Python 3.7, 3.8, 3.9, 3.10, 3.11, 3.12+
+- Python 3.8 and newer (declared `Requires-Python: >=3.8`)
 
 ---
 

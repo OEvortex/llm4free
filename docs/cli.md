@@ -48,8 +48,8 @@ The CLI uses **Rich** for formatted table outputs and informative panels.
 |---------|-------------|----------------|
 | `version` | Print the installed `llm4free` version | — |
 | `text` | General web/text search | `ddg`, `bing`, `yahoo`, `brave`, `mojeek`, `wikipedia`, `serpbase` |
-| `images` | Image search | `ddg`, `bing`, `yahoo` |
-| `videos` | Video search | `ddg`, `yahoo` |
+| `images` | Image search | `ddg`, `bing`, `yahoo`, `brave` |
+| `videos` | Video search | `ddg`, `yahoo`, `brave` |
 | `news` | News search | `ddg`, `bing`, `yahoo` |
 | `weather` | Weather information | `ddg`, `yahoo` |
 | `answers` | Instant answers | `ddg`, `yahoo` |
@@ -65,7 +65,7 @@ The CLI uses **Rich** for formatted table outputs and informative panels.
 
 ## Common Options
 
-Most search commands share these options:
+`text` (and its `search` alias) accepts these options:
 
 | Option | Alias | Default | Description |
 |--------|-------|---------|-------------|

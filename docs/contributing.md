@@ -25,7 +25,7 @@ Thank you for considering contributing to LLM4Free. This guide will help you get
 
 ### Prerequisites
 
-- Python 3.8+
+- Python 3.10+
 - Git
 - A GitHub account
 
@@ -68,7 +68,7 @@ uv run pytest
 uv run ruff check .
 
 # Run type checker
-uv run ty check .
+uvx ty check .
 ```
 
 ### Using pip
@@ -110,30 +110,38 @@ ty --version
 
 ### 1. New Providers
 
-See [Provider Development Guide](provider-development.md) for detailed instructions.
-
 ```python
-# Example structure
-class NewProvider(Provider):
-    required_auth = False/True
-    
-    def __init__(self, ...):
-        # Implementation
-        pass
-    
-    def ask(self, prompt: str, **kwargs):
-        # Implementation
-        pass
-    
-    def chat(self, prompt: str, **kwargs):
-        # Implementation
-        pass
-    
-    def get_message(self, response):
-        # Implementation
-        pass
+# Modern OpenAI-compatible providers live in llm4free/llm/
+from typing import Any, Dict, List, Optional
+
+from llm4free.llm.base import BaseChat, BaseCompletions, OpenAICompatibleProvider, SimpleModelList
+
+
+class NewProvider(OpenAICompatibleProvider):
+    required_auth = False  # or True when an API key is mandatory
+    AVAILABLE_MODELS = ["new-model"]
+
+    def __init__(self, api_key: Optional[str] = None, **kwargs: Any):
+        super().__init__(api_key=api_key, **kwargs)
+        self.chat = Chat(self)
+
+    @property
+    def models(self) -> SimpleModelList:
+        return SimpleModelList(type(self).AVAILABLE_MODELS)
+
+
+class Chat(BaseChat):
+    def __init__(self, client: NewProvider):
+        self.completions = Completions(client)
+
+
+class Completions(BaseCompletions):
+    def create(self, *, model: str, messages: List[Dict[str, Any]], stream: bool = False, **kwargs: Any):
+        # Return a ChatCompletion, or a generator of ChatCompletionChunk when stream=True
+        ...
 ```
 
+See the [Provider Development Guide](provider-development.md) for the full contract.
 ### 2. Bug Fixes
 
 ```bash
@@ -195,17 +203,17 @@ Maximum 100 characters (enforced by Ruff):
 
 ```python
 # ✓ Good - under 100 characters
-response = client.chat("Hello", max_tokens=100, temperature=0.7)
+response = client.chat.completions.create(model="gpt-4o", messages=messages, max_tokens=100)
 
 # ❌ Bad - over 100 characters
-response = client.chat("Hello", max_tokens=100, temperature=0.7, TOP_P=0.9, presence_penalty=0)
+response = client.chat.completions.create(model="gpt-4o", messages=messages, max_tokens=100, temperature=0.7, top_p=0.9)
 # Should be split:
-response = client.chat(
-    "Hello",
+response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=messages,
     max_tokens=100,
     temperature=0.7,
     top_p=0.9,
-    presence_penalty=0,
 )
 ```
 
@@ -249,7 +257,7 @@ def chat(
         str: The AI response
     
     Raises:
-        ProviderException: If the request fails
+        ProviderConnectionError: If the request fails
     
     Example:
         >>> client = MyProvider(api_key="key")
@@ -308,59 +316,47 @@ uv run pytest
 uv run pytest -v
 
 # Run specific test file
-uv run pytest tests/providers/test_groq.py
+uv run pytest tests/test_tool_calling.py
 
 # Run specific test
-uv run pytest tests/providers/test_groq.py::TestGROQ::test_chat
+uv run pytest tests/test_tool_calling.py::test_name
 ```
 
 ### Write Tests
 
-Create `tests/providers/test_yourprovider.py`:
+Create `tests/test_yourprovider.py`:
 
 ```python
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from llm4free.Provider.YourProvider import YourProvider
+from llm4free.llm.your_provider import YourProvider
 
 
 class TestYourProvider(unittest.TestCase):
-    
+
     def setUp(self):
         """Setup test fixtures."""
         self.provider = YourProvider(api_key="test-key")
-    
-    @patch('llm4free.Provider.YourProvider.Session.post')
+
+    @patch("llm4free.llm.your_provider.requests.post")
     def test_chat_basic(self, mock_post):
-        """Test basic chat functionality."""
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "choices": [{"message": {"content": "Test response"}}]
-        }
-        mock_post.return_value = mock_response
-        
-        response = self.provider.chat("Hello")
-        self.assertEqual(response, "Test response")
-    
-    @patch('llm4free.Provider.YourProvider.Session.post')
-    def test_chat_streaming(self, mock_post):
-        """Test streaming responses."""
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "choices": [{"message": {"content": "Chunk 1"}}]
-        }
-        mock_post.return_value = mock_response
-        
-        response = self.provider.chat("Hello", stream=True)
-        chunks = list(response)
-        self.assertTrue(len(chunks) > 0)
-    
-    def test_authentication_required(self):
-        """Test that provider requires authentication."""
-        self.assertTrue(self.provider.required_auth)
+        """Test the OpenAI-compatible non-streaming interface."""
+        mock_post.return_value = MagicMock(
+            status_code=200,
+            json=lambda: {"choices": [{"message": {"content": "Test response"}}]},
+        )
+
+        response = self.provider.chat.completions.create(
+            model="new-model",
+            messages=[{"role": "user", "content": "Hello"}],
+        )
+        self.assertEqual(response.choices[0].message.content, "Test response")
+
+    def test_available_models(self):
+        """Test that the provider exposes its model list."""
+        self.assertIn("new-model", list(self.provider.models))
+        self.assertEqual(self.provider.required_auth, True)
 
 
 if __name__ == "__main__":
@@ -394,7 +390,7 @@ uv run ruff check .
 uv run ruff check . --fix
 
 # Check specific file
-uv run ruff check llm4free/Provider/MyProvider.py
+uv run ruff check llm4free/llm/my_provider.py
 
 # Format code
 uv run ruff format .
@@ -404,10 +400,10 @@ uv run ruff format .
 
 ```bash
 # Check all files
-uv run ty check .
+uvx ty check .
 
 # Check specific file
-uv run ty check llm4free/Provider/MyProvider.py
+uvx ty check llm4free/llm/my_provider.py
 ```
 
 ### Quality Checklist
@@ -422,7 +418,7 @@ uv run ruff check .
 uv run ruff check . --fix
 
 # 3. Run type checker
-uv run ty check .
+uvx ty check .
 
 # 4. Run tests
 uv run pytest
@@ -631,7 +627,7 @@ Use relative paths:
 # Instead of absolute paths
 [Getting Started](../getting-started.md)
 [API Reference](api-reference.md)
-[Provider List](../Provider.md)
+[Provider List](api/providers.md)
 
 # Not: https://github.com/... (too specific)
 ```
@@ -642,10 +638,10 @@ Use relative paths:
 
 Follow the structure in [AGENTS.md](../AGENTS.md):
 
-- Provider implementations go in `llm4free/Provider/`
+- Provider implementations go in `llm4free/llm/`
 - Search engines go in `llm4free/search/`
 - Utilities go in `llm4free/Extra/`
-- Tests go in `tests/providers/`
+- Tests go in `tests/`
 - Documentation goes in `docs/`
 
 ---

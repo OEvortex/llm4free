@@ -76,14 +76,29 @@ Hardware requirements are crucial for optimal performance:
 
 Inferno provides RAM usage estimates for different quantization types to help users manage resources.
 
-## Integration with LLM4Free
+## Calling Inferno from Python
 
-While Inferno is now a standalone package, it provides OpenAI-compatible APIs that work seamlessly with LLM4Free's OpenAI-compatible providers. You can use Inferno-hosted local models through LLM4Free's unified interface.
+Inferno is a separate project and is **not bundled with LLM4Free**. LLM4Free has no `Inferno` provider in `llm4free/llm/`, and its OpenAI-compatible providers use fixed endpoints, so Inferno-hosted models cannot be selected through `llm4free.Client`.
 
-Inferno's API compatibility makes it easy to integrate with popular AI frameworks:
-- **OpenAI API Compatibility:** Inferno exposes OpenAI-compatible API endpoints at `http://localhost:8000/v1` (default port). This includes endpoints for chat completions, text completions, and embeddings
-- **Ollama API Compatibility:** Ollama-compatible API endpoints are available at `http://localhost:8000/api` (default port). These support chat, generate, embed, and tags functionalities
+Call Inferno directly over its OpenAI-compatible endpoint instead:
 
-This dual compatibility allows Inferno to work with existing tools and clients that support these APIs, such as LangChain and LlamaIndex.
+```python
+import requests
+
+response = requests.post(
+    "http://localhost:8000/v1/chat/completions",
+    json={
+        "model": "your-local-model",
+        "messages": [{"role": "user", "content": "Hello"}],
+    },
+    timeout=120,
+)
+response.raise_for_status()
+print(response.json()["choices"][0]["message"]["content"])
+```
+
+You can also use any OpenAI-compatible SDK by pointing its `base_url` at `http://localhost:8000/v1`.
+
+Inferno's API compatibility makes it usable with tools and frameworks that accept a custom OpenAI base URL, such as the official OpenAI SDK, LangChain, and LlamaIndex. Because the model runs locally, no LLM4Free provider or `LLM4FREE_DEFAULT_PROVIDER` setting is involved.
 
 For more information, visit the [Inferno GitHub repository](https://github.com/HelpingAI/inferno) or [PyPI package page](https://pypi.org/project/inferno-llm/).

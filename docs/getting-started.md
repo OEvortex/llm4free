@@ -84,7 +84,7 @@ print(resp.choices[0].message.content)
 
 # Force a specific provider/model
 resp = client.chat.completions.create(
-    model="HeckAI/google/gemini-2.5-flash-preview",
+    model="Gemini/gemini-3.6-flash",
     messages=[{"role": "user", "content": "Hello!"}],
 )
 print(client.chat.completions.last_provider)  # which provider was used
@@ -99,7 +99,7 @@ print(audio_path)
 ```
 
 > [!TIP]
-> `model="auto"` picks a working provider/model for you; `model="HeckAI/google/gemini-2.5-flash-preview"` forces a specific one. `print_provider_info=True` prints the chosen provider/model live, and `client.chat.completions.last_provider` exposes it after the call. The raw-provider examples below are still valid, but the `Client` gives you auto-failover and model resolution for free.
+> `model="auto"` picks a working provider/model for you; `model="Gemini/gemini-3.6-flash"` forces a specific one. `print_provider_info=True` prints the chosen provider/model live, and `client.chat.completions.last_provider` exposes it after the call. The raw-provider examples below are still valid, but the `Client` gives you auto-failover and model resolution for free.
 
 See [client.md](client.md) for the full client reference.
 
@@ -107,14 +107,14 @@ See [client.md](client.md) for the full client reference.
 
 ## Your first chat (raw provider, no API key)
 
-Prefer to use a provider directly? `HeckAI` is a free provider that needs no authentication. Every provider uses the OpenAI-compatible `chat.completions.create(...)` interface. The unified `Client` [above](#the-unified-client) is the recommended path because it adds auto-failover and model resolution automatically.
+Prefer to use a provider directly? `Gemini` is a free provider that needs no authentication. Every provider uses the OpenAI-compatible `chat.completions.create(...)` interface. The unified `Client` [above](#the-unified-client) is the recommended path because it adds auto-failover and model resolution automatically.
 
 ```python
-from llm4free.llm.heckai import HeckAI
+from llm4free.llm.gemini import Gemini
 
-client = HeckAI()
+client = Gemini()
 response = client.chat.completions.create(
-    model="google/gemini-2.5-flash-preview",
+    model="gemini-3.6-flash",
     messages=[{"role": "user", "content": "Explain quantum computing in simple terms"}],
 )
 print(response.choices[0].message.content)
@@ -133,11 +133,11 @@ Quantum computing uses qubits, which can be 0, 1, or both at once (superposition
 Pass `stream=True` to receive tokens as they are generated. The call returns a generator of `ChatCompletionChunk` objects.
 
 ```python
-from llm4free.llm.heckai import HeckAI
+from llm4free.llm.gemini import Gemini
 
-client = HeckAI()
+client = Gemini()
 stream = client.chat.completions.create(
-    model="google/gemini-2.5-flash-preview",
+    model="gemini-3.6-flash",
     messages=[{"role": "user", "content": "Write a short poem about Python"}],
     stream=True,
 )
@@ -154,7 +154,7 @@ See [Streaming Responses](examples/streaming-responses.md) for a dedicated guide
 
 ## Web search
 
-LLM4Free ships multi-engine search (DuckDuckGo, Bing, Brave, Yahoo, Mojeek, Wikipedia). Results are mapping-like objects you can read by `title`, `href`, and `body` keys.
+LLM4Free ships multi-engine search (DuckDuckGo, Bing, Brave, Yahoo, Mojeek, Wikipedia, Parallel, SerpBase). Results are dataclasses with dict-like access; text results have `title`, `href`, and `body` fields.
 
 ```python
 from llm4free import DuckDuckGoSearch
@@ -195,29 +195,32 @@ llm4free news -k "AI breakthrough" -e yahoo
 Text-to-image providers include `PollinationsAI`, `TogetherImage`, `StableHordeAI`, `Lexica`, `MiragicAI`, and more. Each exposes an OpenAI-style `images.create(prompt=...)` method that returns an `ImageResponse`.
 
 ```python
-from llm4free.Provider.TTI import PollinationsAI
+from llm4free.TTI import PollinationsAI
 
 gen = PollinationsAI()
-response = gen.images.create(prompt="A serene mountain landscape at sunset", response_format="url")
+response = gen.images.create(model="flux", prompt="A serene mountain landscape at sunset", response_format="url")
 print(response.data[0].url)
 ```
 
 > [!NOTE]
-> `response_format="url"` returns hosted image URLs in `response.data[i].url`. Omit it (or use `b64_json`) to get local file paths via `response.data[i].image_path` instead.
+> `response_format="url"` returns hosted image URLs in `response.data[i].url`.
+> Use `response_format="b64_json"` to get base64 data in `response.data[i].b64_json`.
 
 ```python
-from llm4free.Provider.TTI import TogetherImage
+from llm4free.TTI import TogetherImage
 
 together = TogetherImage()
 response = together.images.create(prompt="A robot playing chess")
-print(response.data[0].image_path)
+print(response.data[0].url or response.data[0].b64_json)
 ```
 
 ---
 
 ## Using an authenticated provider
 
-Authenticate by passing `api_key`. Authenticated providers become available to the unified `Client` automatically.
+Authenticate by passing `api_key` to the provider class. Note that the unified
+`Client` skips auth-required providers by default; pass
+`drop_auth_providers=False` to include them.
 
 ```python
 from llm4free.llm.Auth.groq import Groq
@@ -237,7 +240,7 @@ from llm4free.llm.Auth.deepinfra import DeepInfra
 
 client = DeepInfra(api_key="your-deepinfra-key")
 response = client.chat.completions.create(
-    model="meta-llama/Meta-Llama-3.1-8B-Instruct",
+    model="meta-llama/Meta-Llama-3-8B-Instruct",
     messages=[{"role": "user", "content": "What is Python?"}],
 )
 print(response.choices[0].message.content)

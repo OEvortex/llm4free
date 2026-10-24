@@ -107,29 +107,19 @@ class _LLMModels:
                         module = importlib.import_module(f"{package_name}.{module_name}")
                         for attr_name in dir(module):
                             attr = getattr(module, attr_name)
-                            if (
-                                isinstance(attr, type)
-                                and issubclass(attr, Provider)
-                                and attr != Provider
-                            ):
+                            if isinstance(attr, type):
                                 get_models = getattr(attr, "get_models", None)
                                 available_models = getattr(attr, "AVAILABLE_MODELS", None)
-                                if get_models and callable(get_models):
+                                if callable(get_models):
                                     try:
                                         models = get_models()
                                         if isinstance(models, set):
                                             models = list(models)
                                         provider_models[attr_name] = cast(List[str], models)
-                                    except (RuntimeError, TypeError, ValueError):
+                                    except Exception:
                                         provider_models[attr_name] = []
-                                elif available_models is not None:
-                                    # Convert any sets to lists to ensure serializability
-                                    models = available_models
-                                    if isinstance(models, set):
-                                        models = list(models)
-                                    provider_models[attr_name] = cast(List[str], models)
-                                else:
-                                    provider_models[attr_name] = []
+                                elif isinstance(available_models, (list, tuple, set)):
+                                    provider_models[attr_name] = list(available_models)
                     except (ImportError, AttributeError):
                         pass
             except (ImportError, ValueError):
@@ -155,16 +145,12 @@ class _LLMModels:
                         module = importlib.import_module(f"{package_name}.{module_name}")
                         for attr_name in dir(module):
                             attr = getattr(module, attr_name)
-                            if (
-                                isinstance(attr, type)
-                                and issubclass(attr, Provider)
-                                and attr != Provider
-                            ):
+                            if isinstance(attr, type):
                                 # Get available models
                                 models = []
                                 get_models = getattr(attr, "get_models", None)
                                 available_models = getattr(attr, "AVAILABLE_MODELS", None)
-                                if get_models and callable(get_models):
+                                if callable(get_models):
                                     try:
                                         fetched_models = get_models()
                                         if isinstance(fetched_models, set):
@@ -173,15 +159,12 @@ class _LLMModels:
                                             models = list(fetched_models)
                                         else:
                                             models = [str(fetched_models)] if fetched_models else []
-                                    except (RuntimeError, TypeError, ValueError):
+                                    except Exception:
                                         models = []
-                                elif available_models is not None:
-                                    if isinstance(available_models, set):
-                                        models = list(available_models)
-                                    elif isinstance(available_models, (list, tuple)):
-                                        models = list(available_models)
-                                    else:
-                                        models = [str(available_models)]
+                                elif isinstance(available_models, (list, tuple, set)):
+                                    models = list(available_models)
+                                else:
+                                    continue
 
                                 # Sort models
                                 models = sorted(models)
@@ -302,12 +285,15 @@ class _TTSModels:
                         if (
                             isinstance(attr, type)
                             and issubclass(attr, TTSProvider)
-                            and attr != TTSProvider
+                            and attr not in (TTSProvider,)
+                            and not attr.__name__.startswith("Base")
                         ):
-                            # TTS providers typically use 'all_voices' instead of 'AVAILABLE_MODELS'
-                            all_voices = getattr(attr, "all_voices", None)
-                            if all_voices is not None:
-                                provider_voices[attr_name] = all_voices
+                            # TTS providers expose voices via 'all_voices' or 'SUPPORTED_VOICES'
+                            voices = getattr(attr, "all_voices", None)
+                            if voices is None:
+                                voices = getattr(attr, "SUPPORTED_VOICES", None)
+                            if isinstance(voices, (list, tuple, set, dict)):
+                                provider_voices[attr_name] = list(voices) if isinstance(voices, set) else voices
                 except (ImportError, AttributeError):
                     pass
         except (ImportError, ValueError):
@@ -408,16 +394,12 @@ class _TTIModels:
                     attr = getattr(module, attr_name)
                     if (
                         isinstance(attr, type)
-                        and BaseImages
-                        and issubclass(attr, BaseImages)
-                        and attr != BaseImages
+                        and attr.__name__ != "TTICompatibleProvider"
+                        and not attr.__name__.startswith("Base")
                     ):
-                        if hasattr(attr, "AVAILABLE_MODELS"):
-                            # Convert any sets to lists to ensure serializability
-                            models = cast(List[str], getattr(attr, "AVAILABLE_MODELS", []))
-                            if isinstance(models, set):
-                                models = list(models)
-                            provider_models[attr_name] = models
+                        models = getattr(attr, "AVAILABLE_MODELS", None)
+                        if isinstance(models, (list, tuple, set)):
+                            provider_models[attr_name] = list(models)
             except (ImportError, AttributeError):
                 pass
 
@@ -443,15 +425,14 @@ class _TTIModels:
                     attr = getattr(module, attr_name)
                     if (
                         isinstance(attr, type)
-                        and BaseImages
-                        and issubclass(attr, BaseImages)
-                        and attr != BaseImages
+                        and attr.__name__ != "TTICompatibleProvider"
+                        and not attr.__name__.startswith("Base")
                     ):
                         # Get available models
                         models = []
                         get_models = getattr(attr, "get_models", None)
                         available_models = getattr(attr, "AVAILABLE_MODELS", None)
-                        if get_models and callable(get_models):
+                        if callable(get_models):
                             try:
                                 fetched_models = get_models()
                                 if isinstance(fetched_models, set):
@@ -460,15 +441,12 @@ class _TTIModels:
                                     models = list(fetched_models)
                                 else:
                                     models = [str(fetched_models)] if fetched_models else []
-                            except (RuntimeError, TypeError, ValueError):
+                            except Exception:
                                 models = []
-                        elif available_models is not None:
-                            if isinstance(available_models, set):
-                                models = list(available_models)
-                            elif isinstance(available_models, (list, tuple)):
-                                models = list(available_models)
-                            else:
-                                models = [str(available_models)]
+                        elif isinstance(available_models, (list, tuple, set)):
+                            models = list(available_models)
+                        else:
+                            continue
 
                         # Sort models
                         models = sorted(models)

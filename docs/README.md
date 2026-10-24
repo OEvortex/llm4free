@@ -25,7 +25,7 @@ This hub is organized around the actual modules that live inside the repository,
 | API reference | Structured entry point into the API docs | [docs/api-reference.md](api-reference.md) |
 | Model registry | Enumerate LLM, TTS, and TTI models exposed via `llm4free/models.py` | [docs/models.md](models.md) |
 | OpenAI-compatible API server | Deploy FastAPI server that proxies any LLM4Free provider | [docs/openai-api-server.md](openai-api-server.md) |
-| Search stack | DuckDuckGo/Bing/Yahoo/Brave/Mojeek/Wikipedia/SerpBase engines + CLI usage | [docs/search.md](search.md) |
+| Search stack | DuckDuckGo/Bing/Yahoo/Brave/Mojeek/Wikipedia/SerpBase/Parallel engines + CLI usage | [docs/search.md](search.md) |
 | HTML parser & crawler | Deep dive into `llm4free/scout` | [docs/scout.md](scout.md) |
 | Stream sanitizers | Advanced SSE/HTTP stream processing utilities | [docs/sanitize.md](sanitize.md) |
 | Decorators & utilities | Retry/timing helpers from `llm4free/AIutel.py` | [docs/decorators.md](decorators.md) |
@@ -34,12 +34,15 @@ This hub is organized around the actual modules that live inside the repository,
 | Inferno local LLMs | Run local servers compatible with LLM4Free providers | [docs/inferno.md](inferno.md) |
 | LitPrinter | Debug printing companion shipped with LLM4Free | [docs/litprinter.md](litprinter.md) |
 | LitAgent | Advanced User Agent & IP rotation toolkit | [docs/litagent.md](litagent.md) |
-| Weather toolkit | Weather + ASCII weather helpers inside `llm4free/Extra` | [docs/weather.md](weather.md) |
-| ZeroArt ASCII generator | Zero-dependency ASCII art text generator with multiple fonts and effects | [docs/zeroart.md](zeroart.md) |
-| Provider matrix | Complete list of providers and locations | [Provider.md](../Provider.md) |
+| Provider list | Complete list of providers and locations | [docs/api/providers.md](api/providers.md) |
 
 > [!NOTE]
-> The search stack previously referenced a `Yep` engine in some docs. That engine is **not** part of the current CLI/engine mapping. The supported CLI engines are `ddg` (DuckDuckGo), `bing`, `yahoo`, `brave`, `mojeek`, `wikipedia`, and `serpbase` — see [cli.md](cli.md) and [search.md](search.md).
+> The search stack previously referenced a `Yep` engine and a `zeroart` toolkit.
+> Neither is part of the current codebase. The supported CLI engines are `ddg`
+> (also accepted as `duckduckgo`), `bing`, `yahoo`, `brave`, `mojeek`,
+> `wikipedia`, `serpbase`, and `parallel` — see [cli.md](cli.md) and
+> [search.md](search.md). Weather helpers still live in `llm4free/Extra` but have
+> no dedicated doc page.
 
 ## How to Use This Hub
 
@@ -50,12 +53,12 @@ This hub is organized around the actual modules that live inside the repository,
 
 ## Project Map at a Glance
 
-- `llm4free/cli.py` – Rich-powered CLI with commands for DuckDuckGo, Bing, Yahoo, Brave, Mojeek, Wikipedia, SerpBase, and weather utilities.
-- `llm4free/client.py` – Unified chat + image client with intelligent provider/model resolution and automatic failover.
+- `llm4free/cli.py` – `argparse` CLI with Rich-formatted output; commands cover text, images, videos, news, weather, answers, suggestions, translate, and maps across the engines above.
+- `llm4free/client.py` – Unified chat, image, and audio client with provider/model resolution and automatic failover.
 - `llm4free/server/` – FastAPI-based OpenAI-compatible server (`docs/openai-api-server.md` covers routes, config, env vars).
-- `llm4free/search/` – Shared search abstractions (DuckDuckGo, Bing, Yahoo, Brave, Mojeek, Wikipedia, SerpBase) plus result formatting helpers.
-- `llm4free/llm/` – Provider implementations (no-auth + authenticated under `llm4free/llm/Auth/`) including AI search, TTI, TTS, STT, and experiments.
-- `llm4free/TTI/`, `llm4free/TTS/`, `llm4free/STT/` – Media generation providers.
+- `llm4free/search/` – Shared search abstractions (DuckDuckGo, Bing, Yahoo, Brave, Mojeek, Wikipedia, SerpBase, Parallel) plus result formatting helpers.
+- `llm4free/llm/` – Chat provider implementations (no-auth plus authenticated under `llm4free/llm/Auth/`), base classes, and response utilities.
+- `llm4free/TTI/`, `llm4free/TTS/`, `llm4free/STT/`, `llm4free/AISEARCH/` – Media generation and AI-search providers.
 - `llm4free/Extra/` – Auxiliary toolkits like GGUF conversion, weather clients, temp mail, Git/YouTube utilities.
 - `docs/` – This folder: each guide is sourced directly from the modules above so it stays true to the code.
 
@@ -64,7 +67,7 @@ This hub is organized around the actual modules that live inside the repository,
 - **Architecture Overview** — visual + textual description of the runtime layers.
 - **CLI Reference** — exhaustive explanation of `llm4free` command families.
 - **Unified Client Guide** — how to leverage the `Client` failover logic from Python code.
-- **Model Registry Guide** — using `model.llm`, `model.tts`, and `model.tti` helpers.
+- **Model Registry Guide** — using the `models.llm`, `models.tts`, and `models.tti` helpers.
 
 ## Contributing to Documentation
 

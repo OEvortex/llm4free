@@ -10,11 +10,11 @@ This guide teaches you how to create custom providers for LLM4Free, enabling int
 
 ### Two Provider Types
 
-**Type 1: Native Providers** — Direct implementation from scratch, used for services with unique APIs
+**Type 1: Native Providers** — Direct implementation from scratch (`llm4free.AIbase.Provider`), used for services with unique APIs. These are only usable via direct import; the unified `Client` and HTTP server do not discover them.
 
-**Type 2: OpenAI-Compatible Providers** — For services that mimic the OpenAI API format
+**Type 2: OpenAI-Compatible Providers** — Subclasses of `llm4free.llm.base.OpenAICompatibleProvider`. These are what `Client` and the server discover automatically.
 
-This guide covers both.
+This guide covers both. Provider implementations live in `llm4free/llm/` (authenticated ones in `llm4free/llm/Auth/`); the legacy `llm4free/Provider/` directory no longer exists.
 
 ---
 
@@ -23,11 +23,11 @@ This guide covers both.
 ### Provider Hierarchy
 
 ```
-AIbase.Provider (Abstract)
-├── Native Implementation (Custom API implementation)
-└── OpenAI Providers
-    └── OpenAICompatibleProvider (Abstract)
-        └── Your Provider Implementation
+llm4free.AIbase.Provider (ABC, native ask/chat/get_message interface)
+└── Native Implementation (direct-import only)
+
+llm4free.llm.base.OpenAICompatibleProvider (ABC, chat.completions.create)
+└── Your Provider Implementation (discovered by Client and the server)
 ```
 
 ### Key Concepts
@@ -43,7 +43,7 @@ AIbase.Provider (Abstract)
 
 ### Step 1: Create the Provider File
 
-Create `llm4free/Provider/YourProvider.py`:
+Create `llm4free/llm/your_provider.py`:
 
 ```python
 from typing import Any, Dict, Generator, Optional, Union
@@ -181,29 +181,40 @@ class YourProvider(Provider):
         return str(response)
 ```
 
-### Step 3: Register Your Provider
+> [!NOTE]
+> `Provider.chat()` already implements a tool-calling loop, so a native provider
+> gets tool support for free. `ask()` and `get_message()` are the only methods
+> you must implement. Native providers are not discovered by `Client` or the
+> server; use direct imports (or subclass `OpenAICompatibleProvider` instead).
 
-Edit `llm4free/Provider/__init__.py` and add:
+### Step 3: Export Your Provider
+
+Edit `llm4free/llm/__init__.py` and add:
 
 ```python
-from llm4free.Provider.YourProvider import YourProvider
+from llm4free.llm.your_provider import YourProvider
 
-# At the end of __all__ export list
+# At the end of the __all__ export list
 __all__ = [
     # ... existing providers ...
     "YourProvider",
 ]
 ```
 
+This makes `from llm4free.llm import YourProvider` work, but does **not** register
+the provider with `Client` or the server (they only discover
+`OpenAICompatibleProvider` subclasses).
+
 ### Step 4: Add Unit Tests
 
-Create `tests/providers/test_yourprovider.py`:
+Create `tests/test_your_provider.py` (the repository keeps flat test modules, e.g.
+`tests/test_tool_calling.py`):
 
 ```python
 import unittest
 from unittest.mock import MagicMock, patch
 
-from llm4free.Provider.YourProvider import YourProvider
+from llm4free.llm.your_provider import YourProvider
 
 
 class TestYourProvider(unittest.TestCase):
@@ -213,7 +224,7 @@ class TestYourProvider(unittest.TestCase):
         self.api_key = "test-api-key"
         self.provider = YourProvider(api_key=self.api_key)
     
-    @patch('llm4free.Provider.YourProvider.Session.post')
+    @patch('llm4free.llm.your_provider.Session.post')
     def test_chat(self, mock_post):
         """Test basic chat functionality."""
         # Mock API response
@@ -228,7 +239,7 @@ class TestYourProvider(unittest.TestCase):
         response = self.provider.chat("Hello")
         self.assertEqual(response, "Hello, World!")
     
-    @patch('llm4free.Provider.YourProvider.Session.post')
+    @patch('llm4free.llm.your_provider.Session.post')
     def test_streaming(self, mock_post):
         """Test streaming response."""
         mock_response = MagicMock()
@@ -254,106 +265,139 @@ if __name__ == "__main__":
 
 For services that use OpenAI-like APIs:
 
-### Step 1: Understand the Base Class
+`OpenAICompatibleProvider` requires two things:
+
+1. A `models` property returning a `SimpleModelList` (or `ModelList`).
+2. A `chat` attribute whose `.completions.create(...)` implements the OpenAI
+   signature. The base class calls `super().__init__()` to create
+   `self.session`, `self.proxies`, and `self.available_tools`.
+
+`base_url`, `default_model`, and `default_timeout` are conventions used by many
+providers, not abstract members. `AVAILABLE_MODELS` and `get_models()` are
+optional, but they let the background model fetcher populate the registry and
+let the server validate model names.
+
+### Step 1: Define the Completions Class
 
 ```python
-from llm4free.llm.base import OpenAICompatibleProvider
+import time
+import uuid
+from typing import Any, Dict, List, Optional
+
+from llm4free.llm.base import (
+    BaseChat,
+    BaseCompletions,
+    OpenAICompatibleProvider,
+    SimpleModelList,
+)
+from llm4free.llm.utils import (
+    ChatCompletion,
+    ChatCompletionMessage,
+    Choice,
+    CompletionUsage,
+)
+
+
+class Completions(BaseCompletions):
+    def __init__(self, client: "YourOpenAIProvider"):
+        self._client = client
+
+    def create(
+        self,
+        *,
+        model: str,
+        messages: List[Dict[str, Any]],
+        max_tokens: Optional[int] = None,
+        stream: bool = False,
+        temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
+        tools=None,
+        tool_choice=None,
+        timeout: Optional[int] = None,
+        proxies: Optional[dict] = None,
+        **kwargs: Any,
+    ) -> Any:
+        if stream:
+            return self._stream(model, messages, timeout)
+
+        data = self._request(model, messages, timeout)
+        return ChatCompletion(
+            id=f"chatcmpl-{uuid.uuid4().hex}",
+            created=int(time.time()),
+            model=model,
+            choices=[
+                Choice(
+                    index=0,
+                    message=ChatCompletionMessage(
+                        role="assistant",
+                        content=data["choices"][0]["message"]["content"],
+                    ),
+                    finish_reason="stop",
+                )
+            ],
+            usage=CompletionUsage(
+                prompt_tokens=0, completion_tokens=0, total_tokens=0
+            ),
+        )
+
+    def _request(self, model: str, messages: List[Dict[str, Any]], timeout):
+        response = self._client.session.post(
+            "https://api.yourservice.com/v1/chat/completions",
+            json={"model": model, "messages": messages},
+            headers={"Authorization": f"Bearer {self._client.api_key}"},
+            timeout=timeout or self._client.timeout,
+        )
+        response.raise_for_status()
+        return response.json()
+```
+
+> [!IMPORTANT]
+> When `stream=True`, `create()` must return a generator of
+> `ChatCompletionChunk` objects, not a `ChatCompletion`. Models are typed with
+> pydantic: `ChatCompletion.choices` must contain `Choice` instances, and
+> `usage` must be a `CompletionUsage` with all three token counts.
+
+### Step 2: Define the Provider Class
+
+```python
+class Chat(BaseChat):
+    def __init__(self, client: "YourOpenAIProvider"):
+        self.completions = Completions(client)
+
 
 class YourOpenAIProvider(OpenAICompatibleProvider):
-    """
-    A provider that uses OpenAI-compatible API.
-    """
-    required_auth = True  # Or False if free
+    required_auth = True          # False makes it eligible for the HTTP server
+    AVAILABLE_MODELS = ["model-1", "model-2"]
+    default_model = "model-1"
+
+    def __init__(self, api_key: str, timeout: int = 30, **kwargs: Any):
+        super().__init__(api_key=api_key, **kwargs)
+        self.api_key = api_key
+        self.timeout = timeout
+        self.chat = Chat(self)
+
+    @property
+    def models(self) -> SimpleModelList:
+        return SimpleModelList(type(self).AVAILABLE_MODELS)
+
+    @classmethod
+    def get_models(cls, api_key: Optional[str] = None) -> List[str]:
+        return cls.AVAILABLE_MODELS
 ```
 
-### Step 2: Implement Required Properties
+Existing providers such as
+[`llm4free/llm/akashgpt.py`](../llm4free/llm/akashgpt.py) are compact reference
+implementations of this pattern.
 
-```python
-    @property
-    def models(self):
-        """Return available models."""
-        return type("M", (), {
-            "list": lambda self: [
-                "model-1",
-                "model-2",
-                "model-3",
-            ]
-        })()
-    
-    @property
-    def base_url(self) -> str:
-        """API base URL."""
-        return "https://api.yourservice.com/v1"
-    
-    @property
-    def default_model(self) -> str:
-        """Default model to use."""
-        return "model-1"
-    
-    @property
-    def default_timeout(self) -> int:
-        """Default request timeout."""
-        return 30
-```
+### Step 3: Make It Discoverable
 
-### Step 3: Implement the Completions Method
-
-```python
-    def create_completion(
-        self,
-        messages: List[Dict[str, Any]],
-        model: Optional[str] = None,
-        stream: bool = False,
-        **kwargs: Any,
-    ) -> Union[ChatCompletion, Generator]:
-        """
-        Create a chat completion using OpenAI-compatible format.
-        """
-        from llm4free.llm.utils import ChatCompletion
-        
-        url = f"{self.base_url}/chat/completions"
-        
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
-        
-        payload = {
-            "model": model or self.default_model,
-            "messages": messages,
-            "stream": stream,
-            **kwargs,  # temperature, top_p, etc.
-        }
-        
-        try:
-            response = self.session.post(
-                url,
-                json=payload,
-                headers=headers,
-                timeout=kwargs.get("timeout", self.default_timeout),
-            )
-            
-            if response.status_code != 200:
-                raise Exception(f"API error: {response.text}")
-            
-            if stream:
-                return self._handle_stream(response)
-            else:
-                data = response.json()
-                return ChatCompletion(
-                    id="",
-                    model=model or self.default_model,
-                    choices=[{
-                        "message": {
-                            "content": data["choices"][0]["message"]["content"],
-                            "role": "assistant"
-                        }
-                    }],
-                    usage={"total_tokens": 0}
-                )
-        except Exception as e:
-            raise Exception(f"Failed to create completion: {str(e)}")
-```
+- **Python `Client`:** add the class to `llm4free/llm/__init__.py`; `Client`
+  discovers every `OpenAICompatibleProvider` subclass exported there. Providers
+  with `required_auth = True` are skipped unless you pass an `api_key` and
+  `drop_auth_providers=False`.
+- **HTTP server:** same export. The server registers only providers whose
+  `required_auth` is `False`, and indexes their `AVAILABLE_MODELS` as
+  `ProviderName/model`.
 
 ---
 
@@ -461,7 +505,7 @@ class MyProvider(Provider):
 - [ ] Timeout handling is correct
 - [ ] Error messages are clear
 - [ ] Type hints are complete
-- [ ] Tests pass: `pytest tests/providers/`
+- [ ] Tests pass: `pytest tests/`
 - [ ] Linting passes: `ruff check .`
 - [ ] Type checking passes: `ty check .`
 
@@ -471,24 +515,27 @@ class MyProvider(Provider):
 
 ### 1. Document Your Provider
 
-Edit `Provider.md` and add:
+Add an entry to [docs/api/providers.md](api/providers.md):
 
 ```markdown
 ### YourProvider
 
-**Location:** `llm4free/Provider/YourProvider.py`
+**Location:** `llm4free/llm/your_provider.py`
 
 **Description:** Brief description of what it does
 
-**Authentication:** API key required
+**Authentication:** API key required (`required_auth = True`)
 
 **Models:** List available models
 
 **Example:**
 ```python
-from llm4free import YourProvider
+from llm4free.llm import YourProvider
 provider = YourProvider(api_key="your-key")
-response = provider.chat("Hello")
+response = provider.chat.completions.create(
+    model="model-1",
+    messages=[{"role": "user", "content": "Hello"}],
+)
 ```
 ```
 
@@ -566,4 +613,4 @@ def chat(self, prompt: str, **kwargs) -> str:
 - [API Reference](api-reference.md) — Full API documentation
 - [Contributing Guide](contributing.md) — How to contribute
 - [Testing Guidelines](../AGENTS.md) — Testing standards
-- [Provider List](../Provider.md) — All available providers
+- [Provider List](api/providers.md) — All available providers

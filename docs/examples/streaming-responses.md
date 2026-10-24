@@ -73,15 +73,15 @@ print("-" * 40)
 Every LLM provider also exposes the same OpenAI-compatible `chat.completions.create(..., stream=True)` method directly. With `stream=True` the call returns a generator of `ChatCompletionChunk` objects.
 
 ```python
-from llm4free.llm.heckai import HeckAI
+from llm4free.llm.gemini import Gemini
 
-client = HeckAI()
+client = Gemini()
 
 print("AI Response:")
 print("-" * 40)
 
 stream = client.chat.completions.create(
-    model="google/gemini-2.5-flash-preview",
+    model="gemini-3.6-flash",
     messages=[{"role": "user", "content": "Write a short poem about Python"}],
     stream=True,
 )
@@ -110,16 +110,16 @@ Libraries aplenty to choose from too.
 ### Streaming vs non-streaming
 
 ```python
-from llm4free.llm.heckai import HeckAI
+from llm4free.llm.gemini import Gemini
 import time
 
-client = HeckAI()
+client = Gemini()
 
 print("1. WITHOUT STREAMING (waits for complete response)")
 print("-" * 50)
 start = time.time()
 response = client.chat.completions.create(
-    model="google/gemini-2.5-flash-preview",
+    model="gemini-3.6-flash",
     messages=[{"role": "user", "content": "Write a 100-word essay on AI"}],
 )
 elapsed = time.time() - start
@@ -130,7 +130,7 @@ print("2. WITH STREAMING (starts immediately)")
 print("-" * 50)
 start = time.time()
 stream = client.chat.completions.create(
-    model="google/gemini-2.5-flash-preview",
+    model="gemini-3.6-flash",
     messages=[{"role": "user", "content": "Write a 100-word essay on AI"}],
     stream=True,
 )
@@ -146,15 +146,15 @@ print(f"\nTime: {elapsed:.1f}s")
 
 ## Streaming with different providers
 
-### HeckAI (free)
+### Gemini (free)
 
 ```python
-from llm4free.llm.heckai import HeckAI
+from llm4free.llm.gemini import Gemini
 
-client = HeckAI()
+client = Gemini()
 
 stream = client.chat.completions.create(
-    model="google/gemini-2.5-flash-preview",
+    model="gemini-3.6-flash",
     messages=[{"role": "user", "content": "Hello, write something nice"}],
     stream=True,
 )
@@ -210,12 +210,12 @@ print()
 ### Collect into a string
 
 ```python
-from llm4free.llm.heckai import HeckAI
+from llm4free.llm.gemini import Gemini
 
-client = HeckAI()
+client = Gemini()
 
 stream = client.chat.completions.create(
-    model="google/gemini-2.5-flash-preview",
+    model="gemini-3.6-flash",
     messages=[{"role": "user", "content": "Write a poem"}],
     stream=True,
 )
@@ -233,12 +233,12 @@ print(full_response)
 ### Count words in real time
 
 ```python
-from llm4free.llm.heckai import HeckAI
+from llm4free.llm.gemini import Gemini
 
-client = HeckAI()
+client = Gemini()
 
 stream = client.chat.completions.create(
-    model="google/gemini-2.5-flash-preview",
+    model="gemini-3.6-flash",
     messages=[{"role": "user", "content": "Write an essay on machine learning"}],
     stream=True,
 )
@@ -256,12 +256,12 @@ print(f"\n\nTotal words: {word_count}")
 ### Filter chunks
 
 ```python
-from llm4free.llm.heckai import HeckAI
+from llm4free.llm.gemini import Gemini
 
-client = HeckAI()
+client = Gemini()
 
 stream = client.chat.completions.create(
-    model="google/gemini-2.5-flash-preview",
+    model="gemini-3.6-flash",
     messages=[{"role": "user", "content": "Discuss artificial intelligence"}],
     stream=True,
 )
@@ -285,16 +285,16 @@ print("\n")
 ### Save to file while streaming
 
 ```python
-from llm4free.llm.heckai import HeckAI
+from llm4free.llm.gemini import Gemini
 from datetime import datetime
 
-client = HeckAI()
+client = Gemini()
 
 filename = f"response_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
 print(f"Streaming to {filename}...\n")
 
 stream = client.chat.completions.create(
-    model="google/gemini-2.5-flash-preview",
+    model="gemini-3.6-flash",
     messages=[{"role": "user", "content": "Write about the future of technology"}],
     stream=True,
 )
@@ -318,9 +318,9 @@ with open(filename, "r", encoding="utf-8") as f:
 ```python
 import json
 
-from llm4free.llm.heckai import HeckAI
+from llm4free.llm.gemini import Gemini
 
-client = HeckAI()
+client = Gemini()
 
 prompts = [
     "What is AI?",
@@ -332,7 +332,7 @@ responses = {}
 for prompt in prompts:
     print(f"\nProcessing: {prompt}")
     stream = client.chat.completions.create(
-        model="google/gemini-2.5-flash-preview",
+        model="gemini-3.6-flash",
         messages=[{"role": "user", "content": prompt}],
         stream=True,
     )
@@ -375,13 +375,10 @@ try:
             full_response += delta
             print(delta, end="", flush=True)
     print("\nStream completed successfully")
-except TimeoutError:
-    print("\nStream interrupted by timeout")
+except Exception as e:
+    print(f"\nStream interrupted: {e}")
     print(f"Partial response ({len(full_response)} chars received):")
     print(full_response)
-except Exception as e:
-    print(f"\nError during streaming: {e}")
-    print(f"Partial response received: {full_response[:100]}...")
 ```
 
 > [!WARNING]
@@ -398,11 +395,11 @@ except Exception as e:
 **Solution:** Iterate the stream and confirm `delta.content` is non-empty:
 
 ```python
-from llm4free.llm.heckai import HeckAI
+from llm4free.llm.gemini import Gemini
 
-client = HeckAI()
+client = Gemini()
 stream = client.chat.completions.create(
-    model="google/gemini-2.5-flash-preview",
+    model="gemini-3.6-flash",
     messages=[{"role": "user", "content": "test"}],
     stream=True,
 )
@@ -422,12 +419,12 @@ else:
 **Solution:** Increase the timeout and capture the partial response:
 
 ```python
-from llm4free.llm.heckai import HeckAI
+from llm4free.llm.gemini import Gemini
 
-client = HeckAI()
+client = Gemini()
 
 stream = client.chat.completions.create(
-    model="google/gemini-2.5-flash-preview",
+    model="gemini-3.6-flash",
     messages=[{"role": "user", "content": "Long prompt"}],
     stream=True,
 )

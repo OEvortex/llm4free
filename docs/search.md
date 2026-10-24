@@ -3,7 +3,7 @@
 > Last updated: 2026-09-24
 > Audience: Developers integrating web search into Python applications
 
-LLM4Free's search module provides unified access to multiple search engines through a consistent Python API and CLI. All engines return typed result dataclasses that support both attribute and dict-style access.
+LLM4Free's search module provides unified access to multiple search engines through a consistent Python API and CLI. Text, image, video, and news results are typed dataclasses that support both attribute and dict-style access; instant answers, suggestions, maps, and translations return plain dictionaries.
 
 > [!TIP]
 > Prefer chat, image, or audio generation instead of search? Use the unified `Client`, which automatically picks any working provider/model (no provider wiring needed):
@@ -48,7 +48,7 @@ for r in results:
 ```
 
 > [!NOTE]
-> All results support both attribute access (`result.title`) and dict-style access (`result['title']`). URL aliases `link` and `url` both map to `href`.
+> Dataclass results support both attribute access (`result.title`) and dict-style access (`result['title']`). On `TextResult`, the aliases `link` and `url` both map to `href`, and `snippet` maps to `body`.
 
 ---
 
@@ -57,14 +57,14 @@ for r in results:
 | Category      | Engines                                                             |
 | ------------- | ------------------------------------------------------------------- |
 | `text`        | DuckDuckGo, Bing, Brave, Yahoo, Mojeek, Wikipedia, SerpBase, Parallel |
-| `images`      | DuckDuckGo, Bing, Brave, Yahoo, SerpBase                            |
+| `images`      | DuckDuckGo, Bing, Brave, Yahoo                                      |
 | `videos`      | DuckDuckGo, Brave, Yahoo                                            |
 | `news`        | DuckDuckGo, Bing, Brave, Yahoo                                      |
 | `suggestions` | DuckDuckGo, Bing, Brave, Yahoo                                      |
 | `weather`     | DuckDuckGo, Yahoo                                                   |
-| `answers`     | DuckDuckGo                                                          |
-| `translate`   | DuckDuckGo                                                          |
-| `maps`        | DuckDuckGo                                                          |
+| `answers`     | DuckDuckGo, Yahoo                                                   |
+| `translate`   | DuckDuckGo, Yahoo                                                   |
+| `maps`        | DuckDuckGo, Yahoo                                                   |
 
 > [!WARNING]
 > `SerpBase` requires an API key (`required_auth = True`). Parallel uses a public MCP endpoint and does not require an API key, but public access is subject to Parallel's free-tier rate limits and terms. All other engines work without authentication. The engine registry is defined in [`llm4free/search/__init__.py`](../../llm4free/search/__init__.py).
@@ -80,11 +80,11 @@ from llm4free import (
     DuckDuckGoSearch,  # Full-featured: text, images, videos, news, maps, translate, weather, answers, suggestions
     BingSearch,        # Text, images, news, suggestions
     BraveSearch,       # Text, images, videos, news, suggestions
-    YahooSearch,       # Text, images, videos, news, suggestions, weather
+    YahooSearch,       # Text, images, videos, news, maps, translate, weather, answers, suggestions
     Parallel,          # LLM-friendly text search through Parallel's public MCP endpoint
     Mojeek,            # Text only (independent European engine)
     Wikipedia,         # Text only (encyclopedia)
-    SerpBase,          # Text, images (requires API key)
+    SerpBase,          # Text only (requires SERPBASE_API_KEY)
 )
 ```
 
@@ -92,7 +92,7 @@ from llm4free import (
 
 ## Result Types
 
-The main interfaces (`DuckDuckGoSearch`, `BingSearch`, `BraveSearch`, `YahooSearch`, `SerpBase`) return typed dataclasses. Low-level engines (`Mojeek`, `Parallel`, `Wikipedia`) return `TextResult`.
+The main interfaces (`DuckDuckGoSearch`, `BingSearch`, `BraveSearch`, `YahooSearch`) return typed dataclasses. Low-level engines (`Mojeek`, `Parallel`, `Wikipedia`, `SerpBase`) return `TextResult`.
 
 ```python
 from llm4free.search.results import TextResult, ImagesResult, VideosResult, NewsResult
@@ -171,7 +171,7 @@ results = ddg.text(
     region="wt-wt",          # Region code
     safesearch="moderate",   # "on", "moderate", "off"
     timelimit="y",           # "d"=day, "w"=week, "m"=month, "y"=year
-    backend="api",           # "api" or "html"
+    backend="auto",          # "auto", "html", or "lite" ("api" is deprecated)
     max_results=10,
 )
 ```
@@ -429,7 +429,7 @@ results = yahoo.suggestions("web dev", region="us")
 
 ## Low-Level Engines
 
-These engines only support text search and are accessed via their `run()` method.
+These engines only support text search and are accessed via their `run()` (or `search()`) method.
 
 ### Mojeek
 
@@ -457,13 +457,19 @@ for r in results:
 
 ### SerpBase
 
-SerpBase proxies a third-party search API and requires authentication.
+SerpBase proxies a third-party search API and requires authentication. It reads
+the API key from the `SERPBASE_API_KEY` environment variable (the constructor
+does not accept an `api_key` argument) and exposes text search through
+`search()` or `run()`.
 
 ```python
+import os
+
 from llm4free import SerpBase
 
-serpbase = SerpBase(api_key="your-serpbase-key")
-results = serpbase.text("machine learning papers", max_results=5)
+os.environ["SERPBASE_API_KEY"] = "your-serpbase-key"
+serpbase = SerpBase()
+results = serpbase.search("machine learning papers")
 ```
 
 ---
@@ -643,19 +649,22 @@ results = Parallel().search("python programming", max_results=5)
 ## Combining Search with AI
 
 > [!TIP]
-> The unified `Client` exposes OpenAI-compatible chat completions. Use a free provider such as `HeckAI` to summarize results — no API key required.
+> The unified `Client` exposes OpenAI-compatible chat completions with `model="auto"`. Use it to summarize results without wiring a provider:
+> ```python
+> from llm4free import Client
+> client = Client()
+> ```
 
 ### Summarize Results
 
 ```python
-from llm4free import DuckDuckGoSearch
-from llm4free.llm.heckai import HeckAI
+from llm4free import DuckDuckGoSearch, Client
 
 search = DuckDuckGoSearch()
 results = search.text("quantum computing", max_results=3)
 
 context = "\n".join(f"{r['title']}: {r['body']}" for r in results)
-ai = HeckAI()
+ai = Client()
 response = ai.chat.completions.create(
     model="auto",
     messages=[{"role": "user", "content": f"Summarize these search results:\n{context}"}],
@@ -666,8 +675,7 @@ print(response.choices[0].message.content)
 ### Research Assistant
 
 ```python
-from llm4free import DuckDuckGoSearch
-from llm4free.llm.heckai import HeckAI
+from llm4free import DuckDuckGoSearch, Client
 
 def research(query: str):
     search = DuckDuckGoSearch()
@@ -677,7 +685,7 @@ def research(query: str):
     for i, r in enumerate(results, 1):
         context += f"{i}. {r['title']}: {r['body'][:100]}...\n"
 
-    ai = HeckAI()
+    ai = Client()
     answer = ai.chat.completions.create(
         model="auto",
         messages=[{"role": "user", "content": f"{context}\nBased on these results, explain: {query}"}],
@@ -694,14 +702,13 @@ research("how does photosynthesis work")
 ### News Analysis
 
 ```python
-from llm4free import DuckDuckGoSearch
-from llm4free.llm.heckai import HeckAI
+from llm4free import DuckDuckGoSearch, Client
 
 search = DuckDuckGoSearch()
 news = search.news("artificial intelligence", max_results=3)
 
 news_text = "\n".join(f"{item['title']}: {item['body']}" for item in news)
-ai = HeckAI()
+ai = Client()
 response = ai.chat.completions.create(
     model="auto",
     messages=[{"role": "user", "content": f"Key takeaways from this news:\n{news_text}"}],
@@ -774,7 +781,7 @@ results = engine.run("test query", max_results=5)
 
 | Method        | Signature                                                                   | Returns               |
 | ------------- | --------------------------------------------------------------------------- | --------------------- |
-| `text`        | `(keywords, region="wt-wt", safesearch="moderate", timelimit=None, backend="api", max_results=None)` | `List[TextResult]`   |
+| `text`        | `(keywords, region="wt-wt", safesearch="moderate", timelimit=None, backend="auto", max_results=None)` | `List[TextResult]`   |
 | `images`      | `(keywords, region="wt-wt", safesearch="moderate", timelimit=None, size=None, color=None, type_image=None, layout=None, license_image=None, max_results=None)` | `List[ImagesResult]` |
 | `videos`      | `(keywords, region="wt-wt", safesearch="moderate", timelimit=None, resolution=None, duration=None, license_videos=None, max_results=None)` | `List[VideosResult]` |
 | `news`        | `(keywords, region="wt-wt", safesearch="moderate", timelimit=None, max_results=None)` | `List[NewsResult]`   |
@@ -811,7 +818,7 @@ results = engine.run("test query", max_results=5)
 | `images`      | `(keywords, region="us", safesearch="moderate", max_results=None)` | `List[ImagesResult]` |
 | `videos`      | `(keywords, region="us", safesearch="moderate", max_results=None)` | `List[VideosResult]` |
 | `news`        | `(keywords, region="us", safesearch="moderate", max_results=None)` | `List[NewsResult]`   |
-| `suggestions` | `(keywords, region="us")`                            | `List[str]`           |
+| `suggestions` | `(keywords, region="us")`                            | `List[dict]`          |
 | `weather`     | `(keywords)`                                         | `List[dict]`          |
 
 ### Parallel
@@ -828,11 +835,10 @@ Parallel's `search()` converts structured MCP results into `TextResult` objects.
 
 | Method        | Signature                                            | Returns               |
 | ------------- | ---------------------------------------------------- | --------------------- |
-| `text`        | `(keywords, max_results=None, **kwargs)`             | `List[TextResult]`   |
-| `images`      | `(keywords, max_results=None, **kwargs)`             | `List[ImagesResult]` |
+| `search`      | `(query, region="us-en", safesearch="moderate", timelimit=None, page=1, **kwargs)` | `List[TextResult]`   |
 
 > [!WARNING]
-> `SerpBase` requires an API key passed to the constructor (`SerpBase(api_key="...")`).
+> `SerpBase` requires the `SERPBASE_API_KEY` environment variable. The constructor does not take an `api_key` argument; `search()` raises `RuntimeError` when the variable is missing.
 
 ### Low-Level Engines (Mojeek, Wikipedia)
 

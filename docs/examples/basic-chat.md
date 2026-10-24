@@ -32,27 +32,27 @@ print(client.chat.completions.create(
 
 # Force a specific provider/model
 print(client.chat.completions.create(
-    model="HeckAI/google/gemini-2.5-flash-preview",
+    model="Gemini/gemini-3.6-flash",
     messages=[{"role": "user", "content": "Hello!"}],
 ).choices[0].message.content)
 print(client.chat.completions.last_provider)  # which provider was used
 ```
 
 > [!TIP]
-> `model="auto"` resolves a working provider/model for you; `model="HeckAI/google/gemini-2.5-flash-preview"` forces a specific backend. `print_provider_info=True` prints the chosen provider/model live. The raw-provider examples below are still valid, but the `Client` gives you auto-failover and model resolution for free.
+> `model="auto"` resolves a working provider/model for you; `model="Gemini/gemini-3.6-flash"` forces a specific backend. `print_provider_info=True` prints the chosen provider/model live. The raw-provider examples below are still valid, but the `Client` gives you auto-failover and model resolution for free.
 
 ---
 
 ## Simplest example (no API key)
 
-`HeckAI` is a free provider — no key required.
+`Gemini` is a free provider — no key required.
 
 ```python
-from llm4free.llm.heckai import HeckAI
+from llm4free.llm.gemini import Gemini
 
-client = HeckAI()
+client = Gemini()
 response = client.chat.completions.create(
-    model="google/gemini-2.5-flash-preview",
+    model="gemini-3.6-flash",
     messages=[{"role": "user", "content": "What is artificial intelligence?"}],
 )
 print(response.choices[0].message.content)
@@ -70,38 +70,38 @@ problem-solving, language understanding, and visual perception...
 
 ## Different providers
 
-### HeckAI (free)
+### Gemini (free)
 
 ```python
-from llm4free.llm.heckai import HeckAI
+from llm4free.llm.gemini import Gemini
 
-client = HeckAI()
+client = Gemini()
 print(client.chat.completions.create(
-    model="google/gemini-2.5-flash-preview",
+    model="gemini-3.6-flash",
     messages=[{"role": "user", "content": "Hello!"}],
 ).choices[0].message.content)
 ```
 
-### ArtingAI (free)
+### Toolbaz (free)
 
 ```python
-from llm4free.llm.artingai import ArtingAI
+from llm4free.llm.toolbaz import Toolbaz
 
-client = ArtingAI()
+client = Toolbaz()
 print(client.chat.completions.create(
-    model="gpt-4o",
+    model="toolbaz-v5",
     messages=[{"role": "user", "content": "Hello!"}],
 ).choices[0].message.content)
 ```
 
-### FreeAI (free)
+### ChatJimmy (free)
 
 ```python
-from llm4free.llm.freeai import FreeAI
+from llm4free.llm.chatjimmy import ChatJimmy
 
-client = FreeAI()
+client = ChatJimmy()
 print(client.chat.completions.create(
-    model="gpt-4o",
+    model="llama3.1-8B",
     messages=[{"role": "user", "content": "Hello!"}],
 ).choices[0].message.content)
 ```
@@ -131,7 +131,7 @@ print(client.chat.completions.create(
 ```
 
 > [!NOTE]
-> The exact model strings accepted depend on the provider. Free providers map friendly names like `"gpt-4o"` to a backend model. Authenticated providers use the upstream model id (for example, Groq's `"llama-3.3-70b-versatile"` or DeepInfra's `"meta-llama/Meta-Llama-3.1-8B-Instruct"`).
+> The exact model strings accepted depend on the provider. Free providers expose their own model lists (for example Gemini's `"gemini-3.6-flash"`, Toolbaz's `"toolbaz-v5"`, or ChatJimmy's `"llama3.1-8B"`). Authenticated providers use the upstream model id (for example, Groq's `"llama-3.3-70b-versatile"` or DeepInfra's `"meta-llama/Meta-Llama-3.1-8B-Instruct"`).
 
 ---
 
@@ -140,11 +140,11 @@ print(client.chat.completions.create(
 Standard OpenAI parameters are supported: `temperature`, `max_tokens`, `top_p`, and `tools`.
 
 ```python
-from llm4free.llm.heckai import HeckAI
+from llm4free.llm.gemini import Gemini
 
-client = HeckAI()
+client = Gemini()
 response = client.chat.completions.create(
-    model="google/gemini-2.5-flash-preview",
+    model="gemini-3.6-flash",
     messages=[
         {"role": "system", "content": "You are a concise tutor."},
         {"role": "user", "content": "Explain recursion in one sentence."},
@@ -162,18 +162,18 @@ print(response.choices[0].message.content)
 Pass the full message list each call to keep context:
 
 ```python
-from llm4free.llm.heckai import HeckAI
+from llm4free.llm.gemini import Gemini
 
-client = HeckAI()
+client = Gemini()
 messages = [{"role": "user", "content": "My name is Ada."}]
 
-r1 = client.chat.completions.create(model="google/gemini-2.5-flash-preview", messages=messages)
+r1 = client.chat.completions.create(model="gemini-3.6-flash", messages=messages)
 print(r1.choices[0].message.content)
 
 # Append the assistant reply, then ask a follow-up
 messages.append({"role": "assistant", "content": r1.choices[0].message.content})
 messages.append({"role": "user", "content": "What was my name?"})
-r2 = client.chat.completions.create(model="google/gemini-2.5-flash-preview", messages=messages)
+r2 = client.chat.completions.create(model="gemini-3.6-flash", messages=messages)
 print(r2.choices[0].message.content)
 ```
 
@@ -194,7 +194,7 @@ print(client.chat.completions.create(
 
 # Force a specific provider/model
 print(client.chat.completions.create(
-    model="HeckAI/google/gemini-2.5-flash-preview",
+    model="Gemini/gemini-3.6-flash",
     messages=[{"role": "user", "content": "Hello!"}],
 ).choices[0].message.content)
 ```

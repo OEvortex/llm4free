@@ -29,7 +29,7 @@ The `Client` is the recommended entry point for everyday use. It wraps all OpenA
 ```python
 from llm4free.client import Client
 
-client = Client()  # optional: api_key=, proxies=, exclude=, exclude_images=, exclude_tts=, print_provider_info=
+client = Client()  # optional: api_key=, proxies=, exclude=, exclude_images=, exclude_tts=, print_provider_info=, drop_auth_providers=
 ```
 
 **Three model-specification modes** (identical across `chat`, `images`, and `audio`):
@@ -37,7 +37,7 @@ client = Client()  # optional: api_key=, proxies=, exclude=, exclude_images=, ex
 | `model` value | Meaning |
 | ------------- | ------- |
 | `"auto"` | The `Client` picks any working provider/model automatically (the smartest default). |
-| `"ProviderName/ModelName"` | Forces a specific provider, e.g. `"ChatGPT/gpt-4o"` or `"PollinationsAI/flux"`. |
+| `"ProviderName/ModelName"` | Forces a specific provider, e.g. `"Gemini/gemini-3.6-flash"` or `"PollinationsAI/flux"`. |
 | `"ModelName"` (bare) | Fuzzily matched across all providers, e.g. `"gpt-4o"`. |
 
 ```python
@@ -45,7 +45,7 @@ client = Client()  # optional: api_key=, proxies=, exclude=, exclude_images=, ex
 client.chat.completions.create(model="auto", messages=[{"role": "user", "content": "Hi"}])
 
 # 2. Force a specific provider/model
-client.chat.completions.create(model="ChatGPT/gpt-4o", messages=[{"role": "user", "content": "Hi"}])
+client.chat.completions.create(model="Gemini/gemini-3.6-flash", messages=[{"role": "user", "content": "Hi"}])
 
 # 3. Bare model name — fuzzily matched
 client.chat.completions.create(model="gpt-4o", messages=[{"role": "user", "content": "Hi"}])
@@ -172,23 +172,23 @@ def get_message(self, response: Response) -> str:
 All providers in `llm4free.llm` subclass `OpenAICompatibleProvider` and expose the familiar `chat.completions.create(...)` interface. Import them by their module path.
 
 ```python
-from llm4free.llm.heckai import HeckAI        # Free, no API key
-from llm4free.llm.artingai import ArtingAI    # Free, no API key
-from llm4free.llm.Auth.groq import Groq       # Requires API key
+from llm4free.llm.gemini import Gemini          # Free, no API key
+from llm4free.llm.gptfree import GptFree       # Free, no API key
+from llm4free.llm.Auth.groq import Groq        # Requires API key
 from llm4free.llm.Auth.deepinfra import DeepInfra  # Requires API key
 ```
 
 > [!TIP]
-> `HeckAI` and `ArtingAI` are free and need no key. `Groq` and `DeepInfra` require an `api_key`. The full set of auth-required providers (e.g. `Cerebras`, `HuggingFace`, `Nvidia`, `OpenRouter`, `Sambanova`, `TogetherAI`, `Upstage`, `Zenmux`) is exported from `llm4free.llm.Auth`.
+> `Gemini`, `GptFree`, `ChatGPT`, `Toolbaz`, and other free providers need no key. `Groq` and `DeepInfra` require an `api_key`. The full set of auth-required providers (`AI4Chat`, `Cerebras`, `DeepAI`, `HuggingFace`, `Nvidia`, `OpenRouter`, `Sambanova`, `TextPollinations`, `TogetherAI`, `TwoAI`, `Upstage`, `Zenmux`) lives under `llm4free.llm.Auth`.
 
 Example:
 
 ```python
-from llm4free.llm.heckai import HeckAI
+from llm4free.llm.gemini import Gemini
 
-client = HeckAI()
+client = Gemini()
 response = client.chat.completions.create(
-    model="google/gemini-2.5-flash-preview",
+    model="gemini-3.6-flash",
     messages=[{"role": "user", "content": "What is artificial intelligence?"}],
 )
 print(response.choices[0].message.content)
@@ -212,11 +212,11 @@ print(response.choices[0].message.content)
 OpenAI-compatible providers accept `stream`, `temperature`, `max_tokens`, `top_p`, and `tools`:
 
 ```python
-from llm4free.llm.heckai import HeckAI
+from llm4free.llm.gemini import Gemini
 
-client = HeckAI()
+client = Gemini()
 stream = client.chat.completions.create(
-    model="google/gemini-2.5-flash-preview",
+    model="gemini-3.6-flash",
     messages=[{"role": "user", "content": "Write a short story"}],
     stream=True,
 )
@@ -230,7 +230,7 @@ for chunk in stream:
 ## Client API
 
 > [!NOTE]
-> **Start here.** The unified `llm4free.client.Client` is the recommended way to use LLM4Free. It provides a unified interface over all providers with automatic provider selection and failover, and accepts the same `model` strings (`"auto"`, `"Provider/Model"`, or a bare model name) as the server.
+> **Start here.** The unified `llm4free.client.Client` is the recommended way to use LLM4Free. It provides a unified interface over all providers with automatic provider selection and failover, and accepts `"auto"`, `"Provider/Model"`, or a bare model name. The HTTP server is stricter: it accepts only `Provider/Model` or a bare model name resolved against its default provider.
 
 ```python
 from llm4free.client import Client
@@ -247,7 +247,7 @@ print(response.choices[0].message.content)
 
 # Specify a provider/model explicitly (ProviderName/ModelName)
 response = client.chat.completions.create(
-    model="ChatGPT/gpt-4o",
+    model="Gemini/gemini-3.6-flash",
     messages=[{"role": "user", "content": "Hello"}]
 )
 print(response.choices[0].message.content)
@@ -269,26 +269,27 @@ The client discovers providers dynamically. A representative sample:
 
 | Provider        | Module Path                          | Required Auth | Notes                       |
 | --------------- | ------------------------------------ | ------------- | --------------------------- |
-| `HeckAI`        | `llm4free.llm.heckai`                | No            | Free, no API key needed     |
-| `ArtingAI`      | `llm4free.llm.artingai`              | No            | Free, no API key needed     |
+| `Gemini`        | `llm4free.llm.gemini`                | No            | Free, no API key needed     |
+| `GptFree`       | `llm4free.llm.gptfree`               | No            | Free, no API key needed     |
 | `Groq`          | `llm4free.llm.Auth.groq`             | Yes           | Fast inference, free tier   |
 | `DeepInfra`     | `llm4free.llm.Auth.deepinfra`        | Yes           | Open models                |
-| `OpenRouter`    | `llm4free.llm.Auth`                  | Yes           | Multi-model provider        |
-| `TogetherAI`    | `llm4free.llm.Auth`                  | Yes           | Open models                |
+| `OpenRouter`    | `llm4free.llm.Auth.openrouter`       | Yes           | Multi-model provider        |
+| `TogetherAI`    | `llm4free.llm.Auth.together_ai`      | Yes           | Open models                |
 
-For the full list, see [`Provider.md`](../Provider.md) and `client.list_providers()`.
+For the full list, see [`Provider.md`](../Provider.md) and `Client.get_chat_providers()`.
 
 ---
 
 ## Text-to-Image (TTI)
 
-TTI providers subclass `TTICompatibleProvider` and expose an `images.generate(...)` method. Import them from `llm4free.TTI`.
+TTI providers subclass `TTICompatibleProvider` and expose an `images.create(...)` method. Import them from `llm4free.TTI`.
 
 ```python
 from llm4free.TTI import PollinationsAI
 
 generator = PollinationsAI()
-response = generator.images.generate(
+response = generator.images.create(
+    model="flux",
     prompt="A peaceful river in autumn",
     size="1024x1024",
 )
@@ -296,27 +297,33 @@ print(response.data)  # List of generated image objects
 ```
 
 > [!NOTE]
-> TTI provider classes are `PollinationsAI`, `BingImageAI`, `Lexica`, `RaphaelAI`, `StableHordeAI`, `TogetherImage`, `MiragicAI`, `PerchanceAI`, `VisualGPT`, `MagicHourAI`, `MagicStudioAI`, `NoLoginTool`, `OneFreeAI`. Verify the exact `generate` parameters per provider via `help()`.
+> TTI provider classes are `PollinationsAI`, `BingImageAI`, `Lexica`, `RaphaelAI`, `StableHordeAI`, `TogetherImage`, `MiragicAI`, `PerchanceAI`, `VisualGPT`, `MagicHourAI`, `MagicStudioAI`, `NoLoginTool`, `OneFreeAI`. Each provider accepts its own `model` names; query `AVAILABLE_MODELS` or `help()` for the exact set.
 
 ---
 
 ## Text-to-Speech (TTS)
 
-TTS providers subclass `BaseTTSProvider` and expose `audio.speech.create(...)` (or `create_speech(...)`). Import them from `llm4free.TTS`.
+TTS providers subclass `BaseTTSProvider` and expose a `tts(text, ...)` method (plus `create_speech(...)`). Import them from `llm4free.TTS`.
+
+```python
+from llm4free.TTS import ParlerTTS
+
+tts = ParlerTTS()
+audio_path = tts.tts("Hello from LLM4Free")
+print(f"Audio saved to: {audio_path}")
+```
+
+Auth-required TTS providers accept `api_key`:
 
 ```python
 from llm4free.TTS import ElevenlabsTTS
 
 tts = ElevenlabsTTS(api_key="your-key")
-audio_path = tts.audio.speech.create(
-    input="Hello from LLM4Free",
-    voice="alloy",
-)
-print(f"Audio saved to: {audio_path}")
+audio_path = tts.tts("Hello from LLM4Free")
 ```
 
 > [!NOTE]
-> TTS provider classes include `ElevenlabsTTS`, `DeepgramTTS`, `KittenTTS`, `LuxTTS`, `MurfAITTS`, `OpenAIFMTTS`, `ParlerTTS`, `PocketTTS`, `QwenTTS`, `SherpaTTS`, `StreamElements`, `TTSAI`, `TTSOpenTTS`, `XLNKTTS`. Some require an `api_key`.
+> TTS provider classes include `ElevenlabsTTS`, `DeepgramTTS`, `KittenTTS`, `KyutaiTTS`, `LuxTTS`, `MurfAITTS`, `OpenAIFMTTS`, `ParlerTTS`, `PocketTTS`, `QwenTTS`, `SherpaTTS`, `StreamElements`, `TTSAI`, `TTSOpenTTS`, `XLNKTTS`. Some require an `api_key`.
 
 ---
 
@@ -329,12 +336,13 @@ from llm4free import model
 
 # LLM models
 model.llm.list()       # Dict[provider, List[model_name]]
-model.llm.get("HeckAI")  # List of models for a provider
-model.llm.summary()    # Counts of providers and models
+model.llm.get("Gemini")  # List of models for a provider
+model.llm.providers()  # Provider metadata
+model.llm.summary()    # {"providers": ..., "models": ..., "provider_model_counts": {...}}
 
 # TTS voices
 model.tts.list()       # Dict[provider, voices]
-model.tts.get("ElevenlabsTTS")
+model.tts.get("ParlerTTS")
 
 # TTI models
 model.tti.list()       # Dict[provider, List[model_name]]
@@ -346,17 +354,19 @@ model.tti.providers()  # Detailed provider metadata
 
 ## Exceptions
 
-### `AIProviderError`
+### `LLM4FreeE`
 
-Base exception for provider-related errors.
+Base exception for LLM4Free errors. Provider-specific errors such as
+`FailedToGenerateResponseError`, `AuthenticationError`, and `RatelimitE`
+inherit from it.
 
 ```python
-from llm4free.exceptions import AIProviderError
+from llm4free.exceptions import LLM4FreeE, FailedToGenerateResponseError
 
 try:
     response = client.chat.completions.create(...)
-except AIProviderError as e:
-    print(f"Provider error: {e}")
+except LLM4FreeE as e:
+    print(f"LLM4Free error: {e}")
 ```
 
 > [!TIP]

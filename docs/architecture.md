@@ -55,7 +55,7 @@ flowchart TD
 
 ### Command Line Interface (`llm4free/cli.py`)
 
-- Built on `Rich` with separate command groups for DuckDuckGo, Yep, Bing, Yahoo, and weather utilities.
+- Built on `argparse` with `Rich` formatting. Subcommands cover text, images, videos, news, weather, answers, suggestions, translate, and maps, with per-engine dispatch through `ENGINES` in `llm4free/cli.py` (DuckDuckGo, Bing, Yahoo, Brave, Mojeek, Wikipedia, SerpBase, Parallel).
 - Uses `_print_data` / `_print_weather` helpers to keep terminal output consistent.
 - Relies on the same search/provider classes exported in `llm4free/__init__.py`, so CLI behavior matches the Python API.
 
@@ -66,9 +66,9 @@ flowchart TD
 
 - Provides auto-failover chat, image, and audio APIs through `Client.chat.completions.create()`, `Client.images.generate()` (alias `Client.images.create()`), and `Client.audio.speech.create()`.
 - Dynamically discovers OpenAI-compatible providers (`llm4free.llm`), TTI providers (`llm4free.TTI`), and TTS providers (`llm4free.TTS`), caches instances, and performs fuzzy model resolution.
-- Accepts three `model` specifications — `"auto"` (pick any working provider/model), `"ProviderName/ModelName"` (force a specific provider), or a bare model name (fuzzy-matched) — which are identical to what the server accepts over HTTP.
+- Accepts three `model` specifications — `"auto"` (pick any working provider/model), `"ProviderName/ModelName"` (force a specific provider), or a bare model name (fuzzy-matched). These are `Client`-only semantics; the HTTP server has a stricter resolver (no `"auto"`, no fuzzy matching).
 - Exposes runtime provider discovery helpers (`Client.get_chat_providers()`, `Client.get_free_chat_providers()`, `Client.get_image_providers()`, `Client.get_tts_providers()`) and can start the OpenAI-compatible server itself via the module-level `run_api()` / `start_server()` helpers.
-- Shares provider cache with the server, so runtime cost of imports stays low.
+- Keeps its own provider instance cache (`Client._provider_cache`); the server maintains a separate cache in `llm4free/server/providers.py`.
 
 ### OpenAI-Compatible Server (`llm4free/server/`)
 
@@ -88,8 +88,8 @@ flowchart TD
 ### Providers (`llm4free/llm/`)
 
 - Normal providers and OpenAI-compatible wrappers live together under `llm4free/llm`, with authenticated providers in the `llm4free/llm/Auth/` subpackage.
-- Specialty directories at the package root: `TTI`, `TTS`, `STT`, `AISEARCH`, and `Provider/UNFINISHED` (providers whose upstreams have gone away and are no longer part of the public API).
-- The matrix in `Provider.md` maps every provider to its implementation file.
+- Specialty directories at the package root: `TTI`, `TTS`, `STT`, and `AISEARCH`. Removed providers whose upstreams disappeared are no longer shipped.
+- The provider reference in `docs/api/providers.md` maps providers to their implementation files.
 
 > [!NOTE]
 > The legacy `llm4free/Provider/OPENAI` directory no longer exists. OpenAI-compatible chat providers now live in `llm4free/llm` (and authenticated ones in `llm4free/llm/Auth`).
@@ -101,7 +101,7 @@ flowchart TD
 
 ### Utilities
 
-- `llm4free/sanitize.py` – SSE/stream sanitization for server + client streaming paths.
+- `llm4free/sanitize.py` – SSE/stream sanitization used by the `AISEARCH` providers (not by the server or `Client`).
 - `llm4free/AIutel.py` – Decorators for retry/timing (documented in `docs/decorators.md`).
 - `llm4free/update_checker.py` – Optional PyPI update notifier executed in `llm4free/__init__.py`.
 
@@ -118,8 +118,8 @@ flowchart TD
    - `llm4free images -k "python"` -> `DuckDuckGoSearch.images()` (HTTP scraping) -> results printed via `_print_data`.
 2. **Client -> Provider Failover**
    - `Client().chat.completions.create(model="gpt-4o")` -> resolves provider & model -> tries preferred provider -> falls back through fuzzily-matched providers if necessary.
-3. **Server -> Provider -> sanitize_stream**
-   - `/v1/chat/completions` request hits FastAPI -> provider resolved -> streaming responses run through `sanitize_stream()` before being sent to clients.
+3. **Server -> Provider**
+   - `/v1/chat/completions` request hits FastAPI -> the strict resolver maps `Provider/Model` to a provider class -> the provider is called with the request parameters. (Streaming sanitization is done inside individual `AISEARCH` providers, not the server.)
 4. **Extras -> Providers**
    - GGUF converter uses huggingface + llama.cpp builders and is fully independent, but still exported to users alongside the main modules.
 

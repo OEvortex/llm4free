@@ -37,12 +37,12 @@
 Most AI libraries lock you into **one provider** and **one way of doing things**. LLM4Free gives you *everything* behind the interface you already know — the OpenAI SDK:
 
 - 🔌 **One interface, 40+ providers.** Every chat provider implements `client.chat.completions.create(...)` — identical to the OpenAI Python SDK. Switch providers by changing one line.
-- 💸 **Free tier built in.** Use HeckAI, Pollinations, and more with **zero API key** — then graduate to Groq, DeepInfra, or your own key when you need scale.
+- 💸 **Free tier built in.** Use Gemini, Toolbaz, ChatGPT, Pollinations, and more with **zero API key** — then graduate to Groq, DeepInfra, or your own key when you need scale.
 - 🔄 **Auto-failover client.** The unified `Client` retries across providers and resolves models for you. No more 3am outages from a dead endpoint.
 - 🔍 **Multi-engine search.** DuckDuckGo, Bing, Brave, Yahoo, Mojeek, Wikipedia — one API.
 - 🖼️🗣️ **Images & voice.** Text-to-image (Pollinations, Together, Stable Horde…) and text-to-speech (ElevenLabs, OpenAI FM, Qwen, Murf…) out of the box.
 - 🚀 **OpenAI-compatible server.** Serve any provider through standard `/v1` endpoints — point the official OpenAI SDK at your laptop.
-- 🧰 **Developer toolbox.** Web crawler (Scout), GitHub data toolkit, temp-mail, GGUF conversion, user-agent rotation, ASCII art, and more.
+- 🧰 **Developer toolbox.** Web crawler (Scout), GitHub data toolkit, temp-mail, user-agent rotation, and more.
 - 📚 **Fully typed & documented.** 100% type-annotated public API with auto-generated MkDocs reference.
 
 > [!NOTE]
@@ -118,24 +118,24 @@ print(response.choices[0].message.content)
 
 # Or force a specific provider/model explicitly
 client.chat.completions.create(
-    model="HeckAI/google/gemini-2.5-flash-preview",
+    model="Gemini/gemini-3.6-flash",
     messages=[{"role": "user", "content": "Hello!"}],
 )
 ```
 
 > [!TIP]
-> `model="auto"` resolves a working provider and model for you — no need to memorize provider names. Use `model="Provider/Model"` (for example `"HeckAI/google/gemini-2.5-flash-preview"`) to force a specific backend. `client.chat.completions.last_provider` tells you which provider was used, and `print_provider_info=True` prints it live. This gives you auto-failover and model resolution for free.
+> `model="auto"` resolves a working provider and model for you — no need to memorize provider names. Use `model="Provider/Model"` (for example `"Gemini/gemini-3.6-flash"`) to force a specific backend. `client.chat.completions.last_provider` tells you which provider was used, and `print_provider_info=True` prints it live. This gives you auto-failover and model resolution for free.
 
 ### AI Chat — no API key required (raw provider)
 
 Prefer to use a provider directly? Every provider implements the OpenAI-compatible interface. The `Client` above is the recommended path because it adds auto-failover and model resolution automatically.
 
 ```python
-from llm4free.llm.heckai import HeckAI
+from llm4free.llm.gemini import Gemini
 
-client = HeckAI()
+client = Gemini()
 response = client.chat.completions.create(
-    model="google/gemini-2.5-flash-preview",
+    model="gemini-3.6-flash",
     messages=[{"role": "user", "content": "Explain quantum computing in simple terms"}],
 )
 print(response.choices[0].message.content)
@@ -180,10 +180,10 @@ print(image.data[0].url)
 Prefer a provider directly? Every TTI provider implements the OpenAI-style `images.create(...)` method too:
 
 ```python
-from llm4free.Provider.TTI import PollinationsAI
+from llm4free.TTI import PollinationsAI
 
 gen = PollinationsAI()
-image = gen.images.create(prompt="A serene mountain landscape at sunset", response_format="url")
+image = gen.images.create(model="flux", prompt="A serene mountain landscape at sunset")
 print(image.data[0].url)
 ```
 
@@ -215,7 +215,7 @@ llm4free --help                       # List all commands
 llm4free version                      # Show version
 llm4free text -k "python programming" # DuckDuckGo search (default)
 llm4free images -k "mountains"        # Image search
-llm4free news -k "AI breakthrough" -t w  # News from last week
+llm4free news -k "AI breakthrough"      # News search
 llm4free weather -l "New York"        # Weather info
 llm4free translate -k "Hola" --to en  # Translation
 ```
@@ -224,15 +224,15 @@ llm4free translate -k "Hola" --to en  # Translation
 
 | Category     | Engines                                                        |
 | ------------ | -------------------------------------------------------------- |
-| `text`       | `ddg`, `bing`, `brave`, `yahoo`, `mojeek`, `wikipedia` |
+| `text`       | `ddg`, `bing`, `brave`, `yahoo`, `mojeek`, `parallel`, `wikipedia`, `serpbase` |
 | `images`     | `ddg`, `bing`, `brave`, `yahoo`                               |
-| `videos`     | `ddg`, `brave`, `yahoo`                                        |
-| `news`       | `ddg`, `bing`, `brave`, `yahoo`                                |
-| `suggestions`| `ddg`, `bing`, `brave`, `yahoo`                                |
-| `weather`    | `ddg`, `yahoo`                                                 |
-| `answers`    | `ddg`                                                          |
-| `translate`  | `ddg`                                                          |
-| `maps`       | `ddg`                                                          |
+| `videos`     | `ddg`, `bing`, `brave`, `yahoo`                               |
+| `news`       | `ddg`, `bing`, `brave`, `yahoo`                               |
+| `suggestions`| `ddg`, `bing`, `brave`, `yahoo`                               |
+| `weather`    | `ddg`, `yahoo`                                                |
+| `answers`    | `ddg`, `bing`, `brave`, `yahoo`                               |
+| `translate`  | `ddg`, `bing`, `brave`, `yahoo`                               |
+| `maps`       | `ddg`, `bing`, `brave`, `yahoo`                               |
 
 ```bash
 # Use a specific engine
@@ -251,22 +251,21 @@ All providers use the **OpenAI-compatible interface** (`client.chat.completions.
 ### Free Providers (No Auth Required)
 
 ```python
-from llm4free.llm.heckai import HeckAI
-from llm4free.llm.artingai import ArtingAI
-from llm4free.llm.freeai import FreeAI
+from llm4free.llm.gemini import Gemini
+from llm4free.llm.gptfree import GptFree
 
-# HeckAI - multiple models
-client = HeckAI()
+# Gemini - multiple models
+client = Gemini()
 response = client.chat.completions.create(
-    model="google/gemini-2.5-flash-preview",
+    model="gemini-3.6-flash",
     messages=[{"role": "user", "content": "Hello!"}],
 )
 print(response.choices[0].message.content)
 
-# ArtingAI
-client = ArtingAI()
+# GptFree
+client = GptFree()
 response = client.chat.completions.create(
-    model="gpt-5",
+    model="gpt-4o",
     messages=[{"role": "user", "content": "Hello!"}],
 )
 ```
@@ -288,11 +287,11 @@ print(response.choices[0].message.content)
 ### Streaming
 
 ```python
-from llm4free.llm.heckai import HeckAI
+from llm4free.llm.gemini import Gemini
 
-client = HeckAI()
+client = Gemini()
 stream = client.chat.completions.create(
-    model="google/gemini-2.5-flash-preview",
+    model="gemini-3.6-flash",
     messages=[{"role": "user", "content": "Tell me a joke"}],
     stream=True,
 )
@@ -330,15 +329,15 @@ Search docs: [docs/search.md](docs/search.md)
 ## 🖼️ Text-to-Image
 
 ```python
-from llm4free.Provider.TTI import PollinationsAI, TogetherImage
+from llm4free.TTI import PollinationsAI, TogetherImage
 
 # PollinationsAI
 poll = PollinationsAI()
-poll.generate_image(prompt="A cyberpunk city at night")
+poll.images.create(model="flux", prompt="A cyberpunk city at night")
 
 # Together AI
 together = TogetherImage()
-together.generate_image(prompt="A robot playing chess")
+together.images.create(model="auto", prompt="A robot playing chess")
 ```
 
 TTI docs: [docs/getting-started.md#image-generation](docs/getting-started.md#image-generation)
@@ -348,10 +347,11 @@ TTI docs: [docs/getting-started.md#image-generation](docs/getting-started.md#ima
 ## 🗣️ Text-to-Speech
 
 ```python
-from llm4free.Provider.TTS import ElevenlabsTTS, ParlerTTS
+from llm4free.TTS import ParlerTTS
 
-tts = ElevenlabsTTS()
-tts.text_to_speech("Hello, world!", voice="alloy")
+tts = ParlerTTS()
+audio_path = tts.tts("Hello, world!")
+print(audio_path)
 ```
 
 TTS model registry: [docs/models.md](docs/models.md)
@@ -378,7 +378,7 @@ from openai import OpenAI
 client = OpenAI(api_key="dummy", base_url="http://localhost:8000/v1")
 
 response = client.chat.completions.create(
-    model="ChatGPT/gpt-4o",
+    model="Gemini/gemini-3.6-flash",
     messages=[{"role": "user", "content": "Hello!"}]
 )
 print(response.choices[0].message.content)
@@ -408,25 +408,29 @@ Full server docs: [docs/openai-api-server.md](docs/openai-api-server.md) | Docke
 Built-in function calling that works with any provider.
 
 ```python
-from llm4free.llm.heckai import HeckAI
-from llm4free.AIbase import Tool
+from llm4free import Client
 
-def get_weather(city: str) -> str:
-    return f"Weather in {city}: Sunny, 25C"
+client = Client()
 
-weather_tool = Tool(
-    name="get_weather",
-    description="Get current weather for a city.",
-    parameters={"city": {"type": "string", "description": "City name."}},
-    implementation=get_weather,
-)
+weather_tool = {
+    "type": "function",
+    "function": {
+        "name": "get_weather",
+        "description": "Get current weather for a city.",
+        "parameters": {
+            "type": "object",
+            "properties": {"city": {"type": "string", "description": "City name."}},
+            "required": ["city"],
+        },
+    },
+}
 
-client = HeckAI(tools=[weather_tool])
 response = client.chat.completions.create(
-    model="google/gemini-2.5-flash-preview",
+    model="auto",
     messages=[{"role": "user", "content": "What is the weather in London?"}],
+    tools=[weather_tool],
 )
-print(response.choices[0].message.content)
+print(response.choices[0].message.tool_calls)
 ```
 
 Tool calling docs: [docs/tool-calling.md](docs/tool-calling.md)
@@ -446,7 +450,8 @@ print(f"Total: {len(all_models)}")
 
 # Models by provider
 summary = model.llm.summary()
-for provider, count in summary.items():
+print(f"Providers: {summary['providers']}, models: {summary['models']}")
+for provider, count in summary["provider_model_counts"].items():
     print(f"  {provider}: {count}")
 
 # TTS voices
@@ -462,14 +467,10 @@ Model registry docs: [docs/models.md](docs/models.md)
 
 | Tool | Description | Docs |
 |------|-------------|------|
-| [SwiftCLI](docs/swiftcli.md) | CLI framework with decorators | [docs/swiftcli.md](docs/swiftcli.md) |
 | [Scout](docs/scout.md) | HTML parser & web crawler | [docs/scout.md](docs/scout.md) |
 | [LitPrinter](docs/litprinter.md) | Styled debug printing | [docs/litprinter.md](docs/litprinter.md) |
 | [LitAgent](docs/litagent.md) | User-agent rotation | [docs/litagent.md](docs/litagent.md) |
 | [GitAPI](docs/gitapi.md) | GitHub data extraction | [docs/gitapi.md](docs/gitapi.md) |
-| [GGUF](docs/gguf.md) | Model conversion & quantization | [docs/gguf.md](docs/gguf.md) |
-| [ZeroArt](docs/zeroart.md) | ASCII art generator | [docs/zeroart.md](docs/zeroart.md) |
-| [Weather](docs/weather.md) | Weather toolkit | [docs/weather.md](docs/weather.md) |
 | [Decorators](docs/decorators.md) | `@timeIt` and `@retry` | [docs/decorators.md](docs/decorators.md) |
 | [Sanitize](docs/sanitize.md) | Stream sanitization | [docs/sanitize.md](docs/sanitize.md) |
 | [Prompts](docs/awesome-prompts.md) | System prompt manager | [docs/awesome-prompts.md](docs/awesome-prompts.md) |

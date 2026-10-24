@@ -39,7 +39,7 @@ model.tti.summary()
 The object exported from `llm4free/__init__.py` is a singleton (`model`) that contains `llm`, `tts`, and `tti` namespaces.
 
 > [!NOTE]
-> The `model` registry is a **static** snapshot built at import time. For the **live, runtime-discovered** lists of providers currently importable (and their auth status), use the `Client` helper class methods — see [Live runtime discovery via the Client](#live-runtime-discovery-via-the-client). These two views complement each other: the registry documents the full catalog, while the `Client` helpers reflect what is actually loadable in your environment.
+> The `model` registry is rebuilt on each call by importing provider modules. Some providers implement `get_models()` by calling their API, so results and counts can change between calls. For the **live, runtime-discovered** lists of providers currently importable (and their auth status), use the `Client` helper class methods — see [Live runtime discovery via the Client](#live-runtime-discovery-via-the-client). These two views complement each other: the registry documents the full catalog, while the `Client` helpers reflect what is actually loadable in your environment.
 > - `llm` supports `list()`, `get()`, `summary()`, `providers()`, and `provider(name)`.
 > - `tti` supports `list()`, `get()`, `summary()`, `providers()`, and `provider(name)`.
 > - `tts` supports `list()`, `get()`, and `summary()` only (no `providers()` method).
@@ -48,10 +48,10 @@ The object exported from `llm4free/__init__.py` is a singleton (`model`) that co
 
 ## How It Works
 
-- The LLM registry walks `llm4free.llm`, `llm4free.AISEARCH`, and `llm4free.STT`, collecting any subclass of `llm4free.AIbase.Provider` that exposes `AVAILABLE_MODELS` or a `get_models()` classmethod.
-- The TTS registry walks `llm4free.TTS`, collecting subclasses of `llm4free.AIbase.TTSProvider` that expose an `all_voices` attribute.
-- The TTI registry walks `llm4free.TTI`, collecting subclasses of `TTI.base.BaseImages` that expose `AVAILABLE_MODELS` or a `get_models()` classmethod.
-- Sets are converted to lists for JSON friendliness. Docstring first lines become `metadata["description"]`.
+- The LLM registry walks `llm4free.llm`, `llm4free.AISEARCH`, and `llm4free.STT`, collecting any class that exposes `get_models()` or a list-like `AVAILABLE_MODELS`.
+- The TTS registry walks `llm4free.TTS`, collecting subclasses of `llm4free.AIbase.TTSProvider` that expose `all_voices` or `SUPPORTED_VOICES`.
+- The TTI registry walks `llm4free.TTI`, collecting classes with list-like `AVAILABLE_MODELS` or `get_models()`, excluding `TTICompatibleProvider` and `Base*` classes.
+- Sets are converted to lists for JSON friendliness. Docstring first lines become `metadata["description"]` in the detail views.
 
 ---
 
@@ -70,7 +70,7 @@ for provider, count in summary['provider_model_counts'].items():
 # Enumerate voices
 voices = model.tts.list()
 print(f"TTS providers: {len(voices)}")
-print(f"Elevenlabs voices (first 5): {list(voices['ElevenlabsTTS'].items())[:5]}")
+print(f"Elevenlabs voices (first 5): {voices.get('ElevenlabsTTS', [])[:5]}")
 
 # Discover TTI metadata
 print(f"TTI providers: {list(model.tti.list().keys())}")
@@ -83,8 +83,8 @@ print(f"TTI providers: {list(model.tti.list().keys())}")
 ### `llm.list()`
 ```python
 {
-  "Groq": ["gpt-4o-mini", "mixtral-8x7b"],
-  "Apriel": ["Apriel-1.6-15B-Thinker"],
+  "Groq": ["distil-whisper-large-v3-en", "gemma2-9b-it", "llama-3.3-70b-versatile", ...],
+  "DeepInfra": ["meta-llama/Llama-3.3-70B-Instruct-Turbo", ...],
   ...
 }
 ```
@@ -92,18 +92,20 @@ print(f"TTI providers: {list(model.tti.list().keys())}")
 ### `llm.summary()`
 ```python
 {
-  "providers": 35,
-  "models": 250,
+  "providers": 30,
+  "models": 1503,
   "provider_model_counts": {
-    "Groq": 6,
-    "Apriel": 1,
+    "Groq": 25,
+    "DeepInfra": 5,
     ...
   }
 }
 ```
 
+Counts depend on the providers installed and on any live `get_models()` calls.
+
 ### `tts.list()`
-Some providers return lists, others return `dict[str, str]` where the value is a voice ID.
+Values are either `list[str]` (voice names) or `dict[str, str]` (voice name -> voice ID), depending on the provider.
 
 ### `tti.providers()`
 ```python
@@ -112,10 +114,10 @@ Some providers return lists, others return `dict[str, str]` where the value is a
       "name": "PollinationsAI",
       "class": "PollinationsAI",
       "module": "pollinations",
-      "models": ["flux", "flux-pro", ...],
-      "parameters": ["prompt", "model", ...],
-      "model_count": 5,
-      "metadata": {"description": "Pollinations text-to-image provider"}
+      "models": ["any-dark", "flux", "flux-3d", "flux-anime", "flux-pro", ...],
+      "parameters": ["prompt", "model", "n", "size", "response_format", ...],
+      "model_count": 16,
+      "metadata": {"description": "PollinationsAI TTI Provider - ..."}
   },
   ...
 }
@@ -125,8 +127,8 @@ Some providers return lists, others return `dict[str, str]` where the value is a
 
 ## Extending the Registry
 
-1. **New provider class** – ensure it inherits from the correct base class (`Provider`, `TTSProvider`, or `BaseImages`).
-2. **Expose models/voices** – implement `get_models()` or set `AVAILABLE_MODELS` / `all_voices`.
+1. **New provider class** – inherit from `OpenAICompatibleProvider` (chat), `BaseTTSProvider` (speech), or `TTICompatibleProvider` (images).
+2. **Expose models/voices** – implement `get_models()` or set `AVAILABLE_MODELS` / `all_voices` (`SUPPORTED_VOICES` also works for TTS).
 3. **Docstrings** – the first line becomes `metadata['description']`, so keep it meaningful.
 4. **Verify** – call `model.llm.list()` (or `tts.list()`, `tti.list()`) after adding a provider to confirm it appears.
 
@@ -166,7 +168,7 @@ print(response.choices[0].message.content)
 ```
 
 > [!TIP]
-> The same provider names returned here are what you pass to the `Client` and the server via the `Provider/Model` syntax — e.g. `client.chat.completions.create(model=f"{chat_providers[0]}/gpt-4o")`.
+> The same provider names returned here are what you pass to the `Client` and the server via the `Provider/Model` syntax, e.g. `client.chat.completions.create(model="Gemini/gemini-3.6-flash")`.
 
 ---
 

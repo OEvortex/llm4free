@@ -18,7 +18,7 @@ LLM4Free's [`AIutel.py`](../llm4free/AIutel.py:1) module provides powerful utili
 
 ## Core Decorators
 
-### [`timeIt`](../llm4free/AIutel.py:12)
+### [`timeIt`](../llm4free/AIutel.py:15)
 
 A versatile timing decorator that measures and displays the execution time of both synchronous and asynchronous functions with colored output.
 
@@ -32,13 +32,13 @@ def my_function():
 ```
 
 **Key Features:**
-- Automatic detection of sync/async functions using [`asyncio.iscoroutinefunction()`](../llm4free/AIutel.py:36)
-- High-precision timing with microsecond accuracy
+- Automatic detection of sync/async functions using `inspect.iscoroutinefunction()` (imported at the top of `AIutel.py`)
+- High-precision timing with microsecond accuracy (`time.monotonic()`)
 - Colored terminal output (green bold) for better visibility
-- Preserves function metadata with [`functools.wraps`](../llm4free/AIutel.py:20)
+- Preserves function metadata with `functools.wraps`
 - Zero-configuration setup
 
-### [`retry`](../llm4free/AIutel.py:41)
+### [`retry`](../llm4free/AIutel.py:69)
 
 A configurable retry decorator that automatically retries functions on exceptions with customizable retry count and delay intervals.
 
@@ -52,15 +52,15 @@ def unreliable_function():
 ```
 
 **Key Features:**
-- Configurable retry attempts and delay intervals
-- Detailed attempt logging with exception information
-- Preserves original exception context
-- Exponential backoff support through custom delay values
-- Thread-safe implementation
+- Configurable retry attempts and a fixed delay between attempts
+- Attempt logging through `litprinter.ic`
+- Re-raises the original exception after the final attempt
+- Supports both synchronous and asynchronous functions
+- No shared state, so it is safe to use across threads
 
 ## Parameters Reference
 
-### [`timeIt`](../llm4free/AIutel.py:12) Parameters
+### [`timeIt`](../llm4free/AIutel.py:15) Parameters
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
@@ -68,7 +68,7 @@ def unreliable_function():
 
 **Returns:** Decorated function with timing capabilities
 
-### [`retry`](../llm4free/AIutel.py:41) Parameters
+### [`retry`](../llm4free/AIutel.py:69) Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -79,7 +79,7 @@ def unreliable_function():
 
 ## Function Signatures
 
-### [`timeIt` Decorator](../llm4free/AIutel.py:12)
+### [`timeIt` Decorator](../llm4free/AIutel.py:15)
 
 ```python
 def timeIt(func: Callable) -> Callable:
@@ -90,10 +90,10 @@ def timeIt(func: Callable) -> Callable:
 ```
 
 **Internal Wrappers:**
-- [`sync_wrapper`](../llm4free/AIutel.py:21): Handles synchronous functions
-- [`async_wrapper`](../llm4free/AIutel.py:29): Handles asynchronous functions
+- `sync_wrapper`: Handles synchronous functions
+- `async_wrapper`: Handles asynchronous functions
 
-### [`retry` Decorator](../llm4free/AIutel.py:41)
+### [`retry` Decorator](../llm4free/AIutel.py:69)
 
 ```python
 def retry(retries: int = 3, delay: float = 1) -> Callable:
@@ -188,6 +188,9 @@ except Exception as e:
 ### Combining Both Decorators
 
 ```python
+import random
+import time
+
 from llm4free.AIutel import timeIt, retry
 
 @timeIt
@@ -209,6 +212,8 @@ result = critical_operation()
 ### Class Method Decoration
 
 ```python
+import random
+
 from llm4free.AIutel import timeIt, retry
 
 class DataProcessor:
@@ -235,15 +240,11 @@ processor.save_to_database(result)
 
 ```python
 import asyncio
+import random
 from llm4free.AIutel import retry
 
-# Note: Current retry decorator doesn't support async, 
-# but can be used with sync wrapper
+# retry() detects coroutine functions and awaits them between attempts
 @retry(retries=3, delay=1)
-def async_wrapper(coro):
-    """Wrapper to apply retry to async functions."""
-    return asyncio.run(coro)
-
 async def unreliable_async_operation():
     """Async operation that might fail."""
     await asyncio.sleep(0.1)
@@ -251,19 +252,20 @@ async def unreliable_async_operation():
         raise RuntimeError("Async operation failed")
     return "Async success"
 
-# Usage
-try:
-    result = async_wrapper(unreliable_async_operation())
-    print(result)
-except Exception as e:
-    print(f"Failed: {e}")
+async def main():
+    try:
+        print(await unreliable_async_operation())
+    except Exception as e:
+        print(f"Failed: {e}")
+
+asyncio.run(main())
 ```
 
 ## Error Handling
 
 ### Exception Propagation
 
-The [`retry`](../llm4free/AIutel.py:41) decorator handles exceptions gracefully:
+The [`retry`](../llm4free/AIutel.py:69) decorator handles exceptions gracefully:
 
 1. **Catches all exceptions** during function execution
 2. **Logs attempt information** with exception details
@@ -290,6 +292,8 @@ except ValueError as e:
 ### Custom Exception Handling
 
 ```python
+import random
+
 from llm4free.AIutel import retry
 
 class CustomRetryError(Exception):
@@ -310,7 +314,7 @@ except Exception as e:
 
 ### Timing Accuracy
 
-The [`timeIt`](../llm4free/AIutel.py:12) decorator uses [`time.time()`](../llm4free/AIutel.py:22) for timing:
+The [`timeIt`](../llm4free/AIutel.py:15) decorator uses `time.monotonic()` for timing:
 
 - **Precision**: Microsecond accuracy (6 decimal places)
 - **Overhead**: Minimal timing overhead (~1-2 microseconds)
@@ -320,10 +324,9 @@ The [`timeIt`](../llm4free/AIutel.py:12) decorator uses [`time.time()`](../llm4f
 
 ### Timing Overhead
 
-The [`timeIt`](../llm4free/AIutel.py:12) decorator adds minimal overhead:
+The [`timeIt`](../llm4free/AIutel.py:15) decorator adds minimal overhead:
 
 ```python
-# Overhead analysis
 @timeIt
 def minimal_function():
     return 42

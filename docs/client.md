@@ -42,7 +42,7 @@ Most libraries that aggregate AI providers make you choose a provider class and 
 | Debugging | `print_provider_info=True` + `last_provider` | Manual |
 
 > [!NOTE]
-> You can still use raw provider classes (e.g. `from llm4free.llm.heckai import HeckAI`) when you want full control. The `Client` is the recommended default; provider classes remain available for fine-grained use.
+> You can still use raw provider classes (e.g. `from llm4free.llm.gemini import Gemini`) when you want full control. The `Client` is the recommended default; provider classes remain available for fine-grained use.
 
 ---
 
@@ -97,7 +97,7 @@ print(chat.choices[0].message.content)
 
 # Force a SPECIFIC provider/model with the "Provider/Model" syntax
 chat = client.chat.completions.create(
-    model="GPT4Free/gpt-4o-mini",
+    model="Gemini/gemini-3.6-flash",
     messages=[{"role": "user", "content": "Explain auto-failover in one sentence."}],
 )
 print(chat.choices[0].message.content)
@@ -117,14 +117,14 @@ The `model` argument is the same across `chat`, `images`, and `audio`. There are
 
    ```python
    # Provider name (case-insensitive) + "/" + model name
-   client.chat.completions.create(model="GPT4Free/gpt-4o-mini", messages=[...])
-   client.images.generate(model="StableDiffusion/flux", prompt="...")
+   client.chat.completions.create(model="Gemini/gemini-3.6-flash", messages=[...])
+   client.images.generate(model="PollinationsAI/flux", prompt="...")
    ```
 
 3. **Bare model name** — Pass just a model string and the client resolves it across all providers. It tries an exact match, then a substring match, then fuzzy matching (`difflib`, 50% cutoff), and finally a random provider if nothing matches.
 
    ```python
-   client.chat.completions.create(model="gpt-4o-mini", messages=[...])  # fuzzy-matched provider
+   client.chat.completions.create(model="gpt-4o", messages=[...])  # fuzzy-matched provider
    ```
 
 > [!TIP]
@@ -142,7 +142,6 @@ print(image.data[0].url)
 audio_path = client.audio.speech.create(
     input_text="Hello from LLM4Free.",
     model="auto",
-    voice="coral",
 )
 print(audio_path)
 ```
@@ -160,7 +159,8 @@ Client(
     exclude=None,            # Optional[List[str]]
     exclude_images=None,     # Optional[List[str]]
     exclude_tts=None,        # Optional[List[str]]
-    print_provider_info=False,  # bool
+    print_provider_info=False,   # bool
+    drop_auth_providers=True,    # bool
     **kwargs,
 )
 ```
@@ -171,12 +171,13 @@ Client(
 |-----------|------|---------|-------------|
 | `provider` | `Type[OpenAICompatibleProvider]` | `None` | Default provider class for chat completions. When specified, this provider is prioritized during resolution. |
 | `image_provider` | `Type[TTICompatibleProvider]` | `None` | Default provider class for image generation. Prioritized during image resolution. |
-| `api_key` | `str` | `None` | API key for authenticated providers. When provided, unlocks providers where `required_auth = True`. |
+| `api_key` | `str` | `None` | API key passed to authenticated providers. Auth-required providers are still excluded unless `drop_auth_providers=False`. |
 | `proxies` | `dict` | `None` | HTTP proxy configuration dictionary (e.g., `{"http": "http://proxy:8080", "https": "http://proxy:8080"}`). Applied to all provider requests. |
 | `exclude` | `List[str]` | `None` | Case-insensitive list of provider names to exclude from chat completions. |
 | `exclude_images` | `List[str]` | `None` | Case-insensitive list of provider names to exclude from image generation. |
 | `exclude_tts` | `List[str]` | `None` | Case-insensitive list of provider names to exclude from audio/TTS generation. |
 | `print_provider_info` | `bool` | `False` | When `True`, prints color-formatted provider name and model to stdout as requests succeed. Useful for debugging resolution and failover. |
+| `drop_auth_providers` | `bool` | `True` | When `True`, providers with `required_auth = True` are excluded even if `api_key` is set. Set to `False` to allow them when a key is supplied. |
 | `**kwargs` | `Any` | — | Additional keyword arguments stored for future use. |
 
 ### Examples
@@ -254,7 +255,7 @@ client.chat.completions.create(
 ```python
 # Basic chat
 response = client.chat.completions.create(
-    model="gpt-4",
+    model="gpt-4o",
     messages=[{"role": "user", "content": "Hello!"}]
 )
 print(response.choices[0].message.content)
@@ -272,7 +273,7 @@ for chunk in client.chat.completions.create(
 # With specific provider
 from llm4free.llm.Auth.groq import Groq
 response = client.chat.completions.create(
-    model="llama-3-70b",
+    model="llama-3.3-70b-versatile",
     messages=[{"role": "user", "content": "Explain recursion."}],
     provider=Groq,
 )
@@ -413,7 +414,6 @@ client.audio.speech.create(
 audio_path = client.audio.speech.create(
     input_text="Hello from LLM4Free.",
     model="auto",
-    voice="coral",
 )
 print(f"Audio saved to: {audio_path}")
 
@@ -431,7 +431,6 @@ from llm4free.TTS.elevenlabs import ElevenlabsTTS
 audio_path = client.audio.speech.create(
     input_text="Hello world",
     provider=ElevenlabsTTS,
-    voice="alloy",
 )
 ```
 
@@ -627,8 +626,8 @@ print(providers)
 free = Client.get_free_chat_providers()
 print(f"Free chat providers: {len(free)}")
 
-# With API key, more providers become available
-client = Client(api_key="sk-your-key")
+# With an API key, authenticated providers can be included
+client = Client(api_key="sk-your-key", drop_auth_providers=False)
 # Now authenticated providers are included in resolution
 ```
 
@@ -640,16 +639,15 @@ client = Client(api_key="sk-your-key")
 
 | Exception | When Raised |
 |-----------|-------------|
-| `RuntimeError` | No providers available or all providers fail |
-| `ValueError` | Provider returned empty content (chat) |
-| `FileNotFoundError` | TTS provider did not generate an audio file |
+| `RuntimeError` | No providers available or all providers fail (chat/images/audio) |
+| `ValueError` | `input_text` for speech is missing or not a string |
 | `ImportError` | Server module not available (for `run_api`/`start_server`) |
 
 ### Validation
 
 - `input_text` for speech must be a non-empty string; otherwise `ValueError` is raised
-- Chat responses with empty content raise `ValueError` and trigger fallback
-- TTS responses that don't produce a file raise `FileNotFoundError` and trigger fallback
+- Chat responses with empty content are treated as failures and trigger fallback
+- TTS responses that don't produce a file are treated as failures and trigger fallback
 
 ### Graceful Degradation
 
@@ -690,7 +688,7 @@ from llm4free.llm.Auth.groq import Groq
 
 # Use Groq for this specific call regardless of auto resolution
 response = client.chat.completions.create(
-    model="llama-3-70b",
+    model="llama-3.3-70b-versatile",
     messages=[{"role": "user", "content": "Hello"}],
     provider=Groq,
 )
@@ -702,8 +700,8 @@ response = client.chat.completions.create(
 # Without API key — only free providers are used
 client = Client()
 
-# With API key — both free and authenticated providers are available
-client = Client(api_key="sk-your-key")
+# With API key and drop_auth_providers=False — both free and authenticated providers
+client = Client(api_key="sk-your-key", drop_auth_providers=False)
 ```
 
 ### Server Functions
@@ -732,8 +730,8 @@ If the API dependencies are not installed, these functions raise `ImportError`.
    ```
    This prints color-formatted provider:model pairs as requests succeed:
    ```
-   GPT4Free:gpt-4o-mini
-   StableDiffusion:flux (Fallback)
+   Gemini:gemini-3.6-flash
+   PollinationsAI:flux (Fallback)
    ```
 
 2. **Check which provider was used**:
@@ -752,7 +750,7 @@ If the API dependencies are not installed, these functions raise `ImportError`.
    ```python
    from llm4free.llm.chatgpt import ChatGPT
    response = client.chat.completions.create(
-       model="gpt-4o-mini",
+       model="GPT-6-free",
        messages=[...],
        provider=ChatGPT,
    )

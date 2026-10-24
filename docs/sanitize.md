@@ -720,23 +720,27 @@ def stream_api_data(url):
 
 ### With LLM4Free Providers
 
+Provider streaming APIs return typed `ChatCompletionChunk` objects, not raw SSE
+text, so you usually do **not** need `sanitize_stream` for them:
+
 ```python
-from llm4free.Provider import ChatGPT
-from llm4free.sanitize import sanitize_stream
+from llm4free import Client
 
-# Process streaming responses from LLM4Free providers
-provider = ChatGPT()
-response = provider.ask_stream("Tell me a story")
+client = Client()
+stream = client.chat.completions.create(
+    model="auto",
+    messages=[{"role": "user", "content": "Tell me a story"}],
+    stream=True,
+)
 
-# Clean and format the streaming response
-for chunk in sanitize_stream(
-    response,
-    intro_value="data:",
-    to_json=True,
-    output_formatter=lambda x: {'role': 'assistant', 'content': x}
-):
-    print(chunk)
+for chunk in stream:
+    text = chunk.choices[0].delta.content
+    if text:
+        print(text, end="")
 ```
+
+Use `sanitize_stream` when you have a raw SSE/bytes stream from a custom
+provider or HTTP endpoint (see the `requests` example above).
 
 ### With File Processing
 
