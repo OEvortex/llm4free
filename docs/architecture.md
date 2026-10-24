@@ -55,7 +55,7 @@ flowchart TD
 
 ### Command Line Interface (`llm4free/cli.py`)
 
-- Built on `swiftcli` with separate command groups for DuckDuckGo, Yep, Bing, Yahoo, and weather utilities.
+- Built on `Rich` with separate command groups for DuckDuckGo, Yep, Bing, Yahoo, and weather utilities.
 - Uses `_print_data` / `_print_weather` helpers to keep terminal output consistent.
 - Relies on the same search/provider classes exported in `llm4free/__init__.py`, so CLI behavior matches the Python API.
 

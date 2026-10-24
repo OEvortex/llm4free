@@ -151,7 +151,6 @@ image = generator.generate_image("Beautiful sunset over mountains")
 - **[Weather Utils](weather.md)** — Weather data retrieval
 - **[Git API](gitapi.md)** — GitHub integration helpers
 - **[Scout](scout.md)** — HTML parser & web crawler
-- **[SwiftCLI](swiftcli.md)** — CLI framework
 - **[Awesome Prompts](awesome-prompts.md)** — Curated system prompts
 - **[Models](models.md)** — Using the model registry
 - **[Tool Calling](tool-calling.md)** — Structured tool/function calling

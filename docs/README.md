@@ -50,7 +50,7 @@ This hub is organized around the actual modules that live inside the repository,
 
 ## Project Map at a Glance
 
-- `llm4free/cli.py` – Rich CLI built on `swiftcli` with commands for DuckDuckGo, Bing, Yahoo, Brave, Mojeek, Wikipedia, SerpBase, and weather utilities.
+- `llm4free/cli.py` – Rich-powered CLI with commands for DuckDuckGo, Bing, Yahoo, Brave, Mojeek, Wikipedia, SerpBase, and weather utilities.
 - `llm4free/client.py` – Unified chat + image client with intelligent provider/model resolution and automatic failover.
 - `llm4free/server/` – FastAPI-based OpenAI-compatible server (`docs/openai-api-server.md` covers routes, config, env vars).
 - `llm4free/search/` – Shared search abstractions (DuckDuckGo, Bing, Yahoo, Brave, Mojeek, Wikipedia, SerpBase) plus result formatting helpers.
