@@ -1,7 +1,3 @@
-from litprinter import ic
-# llm4free/__init__.py
-
-
 from llm4free.litagent import LitAgent
 
 from .AISEARCH import *
@@ -17,10 +13,6 @@ from .TTI import *
 from .TTS import *
 from .update_checker import check_for_updates
 from .version import __version__
-
-# x0gpt.py and X0GPT removed; no import here
-from .zeroart import *
-
 useragent = LitAgent()
 
 
@@ -28,6 +20,6 @@ useragent = LitAgent()
 try:
     update_message = check_for_updates(force=True)
     if update_message:
-        ic(update_message)
+        print(update_message)
 except Exception:
     pass

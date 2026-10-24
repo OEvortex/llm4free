@@ -28,9 +28,9 @@ except ImportError:
         def assemble(*_args: Any, **_kwargs: Any) -> str:
             return ""
 
-    Console = _Dummy
-    Panel = _Dummy
-    Text = _Dummy
+    Console = _Dummy  # ty:ignore[invalid-assignment]
+    Panel = _Dummy  # ty:ignore[invalid-assignment]
+    Text = _Dummy  # ty:ignore[invalid-assignment]
     HAS_RICH = False
 
 PYPI_URL = "https://pypi.org/pypi/llm4free/json"
@@ -275,6 +275,7 @@ def check_for_updates(force: bool = False) -> Optional[str]:
 
 
 if __name__ == "__main__":
+    from litprinter import ic
     msg = check_for_updates(force=True)
     if msg:
         print(msg)
