@@ -650,15 +650,19 @@ class ChatGPT(OpenAICompatibleProvider):
 
 if __name__ == "__main__":
     from rich import print
+    from llm4free.AIutel import timeIt
     client = ChatGPT()
-    response = client.chat.completions.create(
-        model="GPT-6-free",
-        messages=[
-            {"role": "user", "content": "How many r are in strawberry? Answer briefly."}
-        ],
-        stream=True,
-    )
-    for chunk in response:
-        if chunk.choices and chunk.choices[0].delta.content:
-            print(chunk.choices[0].delta.content, end="", flush=True)
-    print()
+    @timeIt
+    def main():
+        response = client.chat.completions.create(
+            model="GPT-6-free",
+            messages=[
+                {"role": "user", "content": "How many r are in strawberry? Answer briefly."}
+            ],
+            stream=True,
+        )
+        for chunk in response:
+            if chunk.choices and chunk.choices[0].delta.content:
+                print(chunk.choices[0].delta.content, end="", flush=True)
+        print()
+    main()
