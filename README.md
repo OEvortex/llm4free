@@ -9,7 +9,7 @@
 
 <h1>LLM4Free</h1>
 
-<p><strong>One Python toolkit for 40+ free &amp; paid AI models, web search, image &amp; voice generation, and a drop-in OpenAI-compatible server — all behind a single, consistent interface.</strong></p>
+<p><strong>A collection of reverse-engineered website AIs — 40+ free LLM chat, image, speech, and search backends exposed through one OpenAI-compatible interface.</strong></p>
 
 <p>
   <a href="https://pypi.org/project/llm4free/"><img src="https://img.shields.io/pypi/v/llm4free.svg?style=flat-square&logo=pypi&label=PyPI" alt="PyPI Version"></a>
@@ -32,28 +32,66 @@
 
 <hr/>
 
-## ✨ Why LLM4Free?
+## Overview
 
-Most AI libraries lock you into **one provider** and **one way of doing things**. LLM4Free gives you *everything* behind the interface you already know — the OpenAI SDK:
+LLM4Free is a Python package that collects **reverse-engineered backends for third-party AI websites** and exposes them through a single, consistent interface modeled on the OpenAI SDK. Instead of integrating each site's private front-end yourself, you import one package and call `client.chat.completions.create(...)`, `client.images.generate(...)`, or `client.audio.speech.create(...)`.
 
-- 🔌 **One interface, 40+ providers.** Every chat provider implements `client.chat.completions.create(...)` — identical to the OpenAI Python SDK. Switch providers by changing one line.
-- 💸 **Free tier built in.** Use Gemini, Toolbaz, ChatGPT, Pollinations, and more with **zero API key** — then graduate to Groq, DeepInfra, or your own key when you need scale.
-- 🔄 **Auto-failover client.** The unified `Client` retries across providers and resolves models for you. No more 3am outages from a dead endpoint.
-- 🔍 **Multi-engine search.** DuckDuckGo, Bing, Brave, Yahoo, Mojeek, Wikipedia — one API.
-- 🖼️🗣️ **Images & voice.** Text-to-image (Pollinations, Together, Stable Horde…) and text-to-speech (ElevenLabs, OpenAI FM, Qwen, Murf…) out of the box.
-- 🚀 **OpenAI-compatible server.** Serve any provider through standard `/v1` endpoints — point the official OpenAI SDK at your laptop.
-- 🧰 **Developer toolbox.** Web crawler (Scout), GitHub data toolkit, temp-mail, user-agent rotation, and more.
-- 📚 **Documented.** Type hints across the public API, plus a MkDocs site with guides and hand-written API reference.
+Every backend is adapted to the same response shapes, so you can switch providers by changing one argument. The unified `Client` adds automatic provider selection, model resolution, instance caching, and failover.
 
-> [!NOTE]
-> LLM4Free is **Apache-2.0 licensed** — free for personal and commercial use.
+- **Chat:** 29 LLM providers, most usable without an API key
+- **Images:** 13 text-to-image providers
+- **Speech:** 14 text-to-speech and 2 speech-to-text providers
+- **Search:** DuckDuckGo, Bing, Brave, Yahoo, Mojeek, Parallel, SerpBase, Wikipedia
+- **Serving:** a FastAPI server exposing OpenAI- and Anthropic-compatible endpoints
+- **Utilities:** HTML parsing, crawling, GitHub data, temporary mail, user-agent rotation, and more
 
-<hr/>
+## Scope and disclaimer
 
-## 📦 Installation
+> [!WARNING]
+> **This package is a collection, not a reverse-engineering tool.**
+>
+> The providers in LLM4Free wrap the public web interfaces of third-party AI services that were reverse-engineered into API-style backends. LLM4Free collects those backends and adapts them to an OpenAI-compatible interface; it does not itself perform reverse engineering.
+>
+> - LLM4Free is **not affiliated with or endorsed by** any provider it wraps.
+> - Third-party endpoints may change, rate-limit, or block access at any time. Availability is best-effort.
+> - You are responsible for complying with each provider's terms of service and all applicable laws.
+> - The software is provided **as is**, without warranty of any kind.
+
+See [LEGAL_NOTICE.md](LEGAL_NOTICE.md) for the full terms.
+
+## Key features
+
+| Capability | What you get |
+|---|---|
+| OpenAI-compatible chat | `chat.completions.create(...)` with streaming and tool calling |
+| OpenAI-compatible images | `images.generate(...)` / `images.create(...)` |
+| OpenAI-compatible speech | `audio.speech.create(...)` and `audio.transcriptions.create(...)` |
+| Unified client | Automatic provider selection, model resolution, caching, failover |
+| Free-first defaults | Auth-required providers are excluded unless explicitly enabled |
+| Model registry | Enumerate providers, models, and voices programmatically |
+| API server | OpenAI `/v1` routes plus Anthropic `/v1/messages` compatibility |
+| CLI | Rich-powered search, weather, translation, maps, and more |
+| Typed public API | Type hints and consistent response objects throughout |
+
+## How it works
+
+1. A third-party AI website exposes a public front-end used by its own web UI.
+2. Each provider in this package reproduces the requests that front-end makes and normalizes the response.
+3. The provider is adapted to the OpenAI-compatible shape: `chat.completions.create(...)`, `images.create(...)`, `tts(...)`, or `audio.transcriptions.create(...)`.
+4. The unified `Client` selects a working provider, resolves the requested model, caches instances, and fails over on error.
+
+The result: services that were only usable in a browser become ordinary Python objects and standard HTTP endpoints.
+
+## Requirements
+
+- Python **3.10+**
+- No API keys required for free providers
+- Optional: `fastapi` and `uvicorn` for the API server (`[api]` extra)
+
+## Installation
 
 ```bash
-# pip
+# Core package
 pip install -U llm4free
 
 # With the OpenAI-compatible API server
@@ -63,223 +101,65 @@ pip install -U "llm4free[api]"
 pip install -U "llm4free[dev]"
 ```
 
+With [uv](https://github.com/astral-sh/uv) (recommended):
+
 ```bash
-# uv (recommended)
 uv add llm4free
-
-# Run without installing
 uv run llm4free --help
-
-# Install as a global CLI tool
 uv tool install llm4free
 ```
 
+Docker:
+
 ```bash
-# Build and run with Docker (see docs/DOCKER.md)
 docker build -t llm4free-api .
 docker run -p 8000:8000 llm4free-api
 ```
 
 > [!NOTE]
-> LLM4Free does **not** ship a pre-built Docker image. The `Dockerfile` in this repo
-> builds the image from source (it installs `llm4free[api]` from PyPI/git at build time).
-> You can also serve LLM4Free without Docker:
+> No pre-built Docker image is published. The `Dockerfile` builds the image from source at build time. See [docs/DOCKER.md](docs/DOCKER.md) for Compose profiles and deployment options.
 
-```bash
-# Install and run the OpenAI-compatible server directly
-pip install "llm4free[api]"
-llm4free-server --port 8000
-
-# Or with uv (recommended)
-uv pip install "llm4free[api]"
-uv run llm4free-server
-```
-
-See [docs/DOCKER.md](docs/DOCKER.md) for full Docker deployment options including compose profiles.
-
-<hr/>
-
-## 🚀 Quick Start
-
-### Unified Client — one client for everything
-
-The fastest way to use LLM4Free is the unified `Client`. It behaves just like the OpenAI SDK you already know, but it picks a working provider for you and auto-fails over when one is down. Use `model="auto"` to let it choose, or `model="Provider/Model"` to force a specific one.
+## Quick start
 
 ```python
-from llm4free.client import Client
+from llm4free import Client
 
-# Let the client pick any working provider/model
 client = Client(print_provider_info=True)
+
 response = client.chat.completions.create(
     model="auto",
-    messages=[{"role": "user", "content": "Explain quantum computing in simple terms"}],
+    messages=[{"role": "user", "content": "Explain quantum computing in simple terms."}],
 )
-print(response.choices[0].message.content)
 
-# Or force a specific provider/model explicitly
+print(response.choices[0].message.content)
+print(client.chat.completions.last_provider)
+```
+
+`model="auto"` lets the client choose a working provider and model. To pin a backend, use `"Provider/Model"`:
+
+```python
 client.chat.completions.create(
     model="Gemini/gemini-3.6-flash",
     messages=[{"role": "user", "content": "Hello!"}],
 )
 ```
 
-> [!TIP]
-> `model="auto"` resolves a working provider and model for you — no need to memorize provider names. Use `model="Provider/Model"` (for example `"Gemini/gemini-3.6-flash"`) to force a specific backend. `client.chat.completions.last_provider` tells you which provider was used, and `print_provider_info=True` prints it live. This gives you auto-failover and model resolution for free.
+Fuzzy model names are also resolved across providers, so `model="gpt-4o"` will match a provider that serves an equivalent model.
 
-### AI Chat — no API key required (raw provider)
+## Chat completions
 
-Prefer to use a provider directly? Every provider implements the OpenAI-compatible interface. The `Client` above is the recommended path because it adds auto-failover and model resolution automatically.
+### Basic usage
 
 ```python
-from llm4free.llm.gemini import Gemini
+from llm4free import Client
 
-client = Gemini()
+client = Client()
 response = client.chat.completions.create(
-    model="gemini-3.6-flash",
-    messages=[{"role": "user", "content": "Explain quantum computing in simple terms"}],
-)
-print(response.choices[0].message.content)
-```
-
-### Web Search
-
-```python
-from llm4free import DuckDuckGoSearch
-
-search = DuckDuckGoSearch()
-results = search.text("best practices for API design", max_results=5)
-for result in results:
-    print(f"{result['title']}: {result['href']}")
-```
-
-### Image Generation
-
-The same unified `Client` does images OpenAI-style — `client.images.generate(...)` (alias `client.images.create(...)`). Use `model="auto"` for automatic provider selection and failover, or pin a backend with `model="Provider/Model"`.
-
-```python
-from llm4free.client import Client
-
-client = Client(print_provider_info=True)
-
-# Auto-select a working image provider
-image = client.images.generate(
-    prompt="A serene mountain landscape at sunset",
     model="auto",
-    size="1024x1024",
-)
-print(image.data[0].url)
-
-# Or force a specific backend
-image = client.images.generate(
-    prompt="A cyberpunk city at night",
-    model="PollinationsAI/flux",
-)
-print(image.data[0].url)
-```
-
-Prefer a provider directly? Every TTI provider implements the OpenAI-style `images.create(...)` method too:
-
-```python
-from llm4free.TTI import PollinationsAI
-
-gen = PollinationsAI()
-image = gen.images.create(model="flux", prompt="A serene mountain landscape at sunset")
-print(image.data[0].url)
-```
-
-### Unified Client — recall the hero example
-
-The unified `Client` shown at the top of [Quick Start](#unified-client--one-client-for-everything) is the recommended way to use LLM4Free: `model="auto"` picks a working provider, `model="Provider/Model"` forces a specific one, and it auto-fails over between providers.
-
-```python
-from llm4free.client import Client
-
-client = Client(print_provider_info=True)
-resp = client.chat.completions.create(
-    model="auto",
-    messages=[{"role": "user", "content": "Summarize LLM4Free."}],
-)
-print(resp.choices[0].message.content)
-```
-
-See [docs/getting-started.md](docs/getting-started.md) for the full quick-start guide.
-
-<hr/>
-
-## 💻 Command Line Interface
-
-A rich CLI powered by [Rich](https://github.com/Textualize/rich) — search, chat, and generate straight from your terminal.
-
-```bash
-llm4free --help                       # List all commands
-llm4free version                      # Show version
-llm4free text -k "python programming" # DuckDuckGo search (default)
-llm4free images -k "mountains"        # Image search
-llm4free news -k "AI breakthrough"      # News search
-llm4free weather -l "New York"        # Weather info
-llm4free translate -k "Hola" --to en  # Translation
-```
-
-### Supported Engines
-
-| Category     | Engines                                                        |
-| ------------ | -------------------------------------------------------------- |
-| `text`       | `ddg`, `bing`, `brave`, `yahoo`, `mojeek`, `parallel`, `wikipedia`, `serpbase` |
-| `images`     | `ddg`, `bing`, `brave`, `yahoo`                               |
-| `videos`     | `ddg`, `bing`, `brave`, `yahoo`                               |
-| `news`       | `ddg`, `bing`, `brave`, `yahoo`                               |
-| `suggestions`| `ddg`, `bing`, `brave`, `yahoo`                               |
-| `weather`    | `ddg`, `yahoo`                                                |
-| `answers`    | `ddg`, `bing`, `brave`, `yahoo`                               |
-| `translate`  | `ddg`, `bing`, `brave`, `yahoo`                               |
-| `maps`       | `ddg`, `bing`, `brave`, `yahoo`                               |
-
-```bash
-# Use a specific engine
-llm4free text -k "climate change" -e bing
-llm4free text -k "quantum physics" -e wikipedia
-```
-
-Full CLI reference: [docs/cli.md](docs/cli.md)
-
-<hr/>
-
-## 🤖 AI Chat Providers
-
-All providers use the **OpenAI-compatible interface** (`client.chat.completions.create(...)`).
-
-### Free Providers (No Auth Required)
-
-```python
-from llm4free.llm.gemini import Gemini
-from llm4free.llm.gptfree import GptFree
-
-# Gemini - multiple models
-client = Gemini()
-response = client.chat.completions.create(
-    model="gemini-3.6-flash",
-    messages=[{"role": "user", "content": "Hello!"}],
-)
-print(response.choices[0].message.content)
-
-# GptFree
-client = GptFree()
-response = client.chat.completions.create(
-    model="gpt-4o",
-    messages=[{"role": "user", "content": "Hello!"}],
-)
-```
-
-### Authenticated Providers
-
-```python
-from llm4free.llm.Auth.groq import Groq
-from llm4free.llm.Auth.deepinfra import DeepInfra
-
-groq = Groq(api_key="your-key")
-response = groq.chat.completions.create(
-    model="llama-3.3-70b-versatile",
-    messages=[{"role": "user", "content": "Write a Python function to sort a list"}],
+    messages=[
+        {"role": "system", "content": "You are a concise assistant."},
+        {"role": "user", "content": "Summarize the plot of Hamlet in three sentences."},
+    ],
 )
 print(response.choices[0].message.content)
 ```
@@ -287,142 +167,28 @@ print(response.choices[0].message.content)
 ### Streaming
 
 ```python
-from llm4free.llm.gemini import Gemini
-
-client = Gemini()
 stream = client.chat.completions.create(
-    model="gemini-3.6-flash",
-    messages=[{"role": "user", "content": "Tell me a joke"}],
+    model="auto",
+    messages=[{"role": "user", "content": "Write a short poem about the sea."}],
     stream=True,
 )
 for chunk in stream:
-    if chunk.choices[0].delta.content:
-        print(chunk.choices[0].delta.content, end="")
+    delta = chunk.choices[0].delta.content
+    if delta:
+        print(delta, end="", flush=True)
 ```
 
-See [llm4free/llm/](llm4free/llm/) for all available provider implementations.
-
-<hr/>
-
-## 🔍 Search Engines
+### Tool calling
 
 ```python
-from llm4free import DuckDuckGoSearch, BingSearch, YahooSearch, BraveSearch
-
-# DuckDuckGo
-ddg = DuckDuckGoSearch()
-results = ddg.text("python frameworks", max_results=5)
-
-# Bing
-bing = BingSearch()
-results = bing.text("climate change solutions")
-
-# Brave
-brave = BraveSearch()
-results = brave.text("machine learning tutorials")
-```
-
-Search docs: [docs/search.md](docs/search.md)
-
-<hr/>
-
-## 🖼️ Text-to-Image
-
-```python
-from llm4free.TTI import PollinationsAI, TogetherImage
-
-# PollinationsAI — no API key required
-poll = PollinationsAI()
-poll.images.create(model="flux", prompt="A cyberpunk city at night")
-
-# Together AI — requires an API key and an explicit model ID
-together = TogetherImage(api_key="your-together-key")
-together.images.create(
-    model="black-forest-labs/FLUX.1-schnell",
-    prompt="A robot playing chess",
-)
-```
-
-TTI docs: [docs/getting-started.md#image-generation](docs/getting-started.md#image-generation)
-
-<hr/>
-
-## 🗣️ Text-to-Speech
-
-```python
-from llm4free.TTS import ParlerTTS
-
-tts = ParlerTTS()
-audio_path = tts.tts("Hello, world!")
-print(audio_path)
-```
-
-TTS model registry: [docs/models.md](docs/models.md)
-
-<hr/>
-
-## 🌐 OpenAI-Compatible API Server
-
-Run a local FastAPI server that serves **any** LLM4Free provider through standard OpenAI endpoints.
-
-```bash
-# Start the server
-llm4free-server
-
-# Custom config
-llm4free-server --port 8080 --host 0.0.0.0 --debug
-```
-
-### Use with the official OpenAI Python client
-
-```python
-from openai import OpenAI
-
-client = OpenAI(api_key="dummy", base_url="http://localhost:8000/v1")
-
-response = client.chat.completions.create(
-    model="Gemini/gemini-3.6-flash",
-    messages=[{"role": "user", "content": "Hello!"}]
-)
-print(response.choices[0].message.content)
-```
-
-### Docker Deployment
-
-Build and run with Docker Compose:
-
-```bash
-docker compose up llm4free-api
-docker compose -f docker-compose.yml -f docker-compose.no-auth.yml up llm4free-api
-```
-
-> [!NOTE]
-> LLM4Free does **not** publish a pre-built Docker image. The `Dockerfile` in this repo
-> builds the image from source at `docker build` time. If you don't want to use Docker,
-> serve the OpenAI-compatible server directly with `pip install "llm4free[api]"` and
-> `llm4free-server`, or via `uv run llm4free-server`.
-
-Full server docs: [docs/openai-api-server.md](docs/openai-api-server.md) | Docker: [docs/DOCKER.md](docs/DOCKER.md)
-
-<hr/>
-
-## 🧩 Tool Calling
-
-Built-in function calling that works with any provider.
-
-```python
-from llm4free import Client
-
-client = Client()
-
 weather_tool = {
     "type": "function",
     "function": {
         "name": "get_weather",
-        "description": "Get current weather for a city.",
+        "description": "Get the current weather for a city.",
         "parameters": {
             "type": "object",
-            "properties": {"city": {"type": "string", "description": "City name."}},
+            "properties": {"city": {"type": "string"}},
             "required": ["city"],
         },
     },
@@ -436,90 +202,427 @@ response = client.chat.completions.create(
 print(response.choices[0].message.tool_calls)
 ```
 
-Tool calling docs: [docs/tool-calling.md](docs/tool-calling.md)
+### Direct provider usage
 
-<hr/>
+Every provider implements the same interface and can be instantiated directly:
 
-## 📊 Model Registry
+```python
+from llm4free.llm.gemini import Gemini
 
-Enumerate available models across all providers.
+client = Gemini()
+response = client.chat.completions.create(
+    model="gemini-3.6-flash",
+    messages=[{"role": "user", "content": "Hello!"}],
+)
+print(response.choices[0].message.content)
+```
+
+Authenticated providers accept an `api_key`:
+
+```python
+from llm4free.llm.Auth.groq import Groq
+
+client = Groq(api_key="your-key")
+response = client.chat.completions.create(
+    model="llama-3.3-70b-versatile",
+    messages=[{"role": "user", "content": "Write a Python function to sort a list."}],
+)
+```
+
+## Image generation
+
+```python
+from llm4free import Client
+
+client = Client(print_provider_info=True)
+
+image = client.images.generate(
+    prompt="A serene mountain landscape at sunset",
+    model="auto",
+    size="1024x1024",
+)
+print(image.data[0].url)
+```
+
+`images.create(...)` is an alias. To force a backend:
+
+```python
+image = client.images.generate(
+    prompt="A cyberpunk city at night",
+    model="PollinationsAI/flux",
+)
+```
+
+Direct provider usage:
+
+```python
+from llm4free.TTI import PollinationsAI
+
+generator = PollinationsAI()
+image = generator.images.create(model="flux", prompt="A cyberpunk city at night")
+print(image.data[0].url)
+```
+
+## Text-to-speech
+
+```python
+from llm4free import Client
+
+client = Client(print_provider_info=True)
+
+audio = client.audio.speech.create(
+    input_text="Welcome to the weekly product update.",
+    model="auto",
+    response_format="mp3",
+)
+print(audio)  # path to the generated audio file
+```
+
+With `stream=True`, the call returns a byte-chunk generator:
+
+```python
+chunks = client.audio.speech.create(
+    input_text="Streaming speech synthesis.",
+    model="auto",
+    stream=True,
+)
+with open("speech.mp3", "wb") as handle:
+    for chunk in chunks:
+        handle.write(chunk)
+```
+
+Direct provider usage:
+
+```python
+from llm4free.TTS import ParlerTTS
+
+tts = ParlerTTS()
+audio_path = tts.tts("Hello, world!")
+print(audio_path)
+```
+
+## Speech-to-text
+
+STT providers follow the OpenAI Whisper API shape:
+
+```python
+from llm4free.STT import ElevenLabsSTT
+
+stt = ElevenLabsSTT()
+with open("audio.mp3", "rb") as audio_file:
+    transcription = stt.audio.transcriptions.create(
+        model="scribe_v1",
+        file=audio_file,
+        response_format="text",
+    )
+print(transcription.text)
+```
+
+Available providers: `ElevenLabsSTT`, `CohereSTT`.
+
+## Web search
+
+```python
+from llm4free import DuckDuckGoSearch, BingSearch, BraveSearch
+
+search = DuckDuckGoSearch()
+results = search.text("best practices for API design", max_results=5)
+
+for result in results:
+    print(result["title"], result["href"])
+```
+
+Other engines expose the same result objects:
+
+```python
+bing = BingSearch()
+brave = BraveSearch()
+
+results = bing.text("climate change solutions")
+results = brave.text("machine learning tutorials")
+```
+
+## Provider catalog
+
+All chat providers implement `chat.completions.create(...)`. Auth-required providers are excluded by the unified client by default; pass `drop_auth_providers=False` and an `api_key` to enable them.
+
+### Chat — free (no key required)
+
+| Provider | Class | Notes |
+|---|---|---|
+| Gemini | `Gemini` | Multiple Gemini models |
+| GptFree | `GptFree` | GPT-4o-compatible endpoint |
+| ChatGPT | `ChatGPT` | Public ChatGPT front-end |
+| Toolbaz | `Toolbaz` | Multiple models |
+| IBM | `IBM` | IBM Granite Playground |
+| PiAI | `PiAI` | Inflection Pi front-end |
+| AkashGPT | `AkashGPT` | — |
+| ChatJimmy | `ChatJimmy` | — |
+| K2Think | `K2Think` | — |
+| Miklium | `Miklium` | — |
+| Netwrck | `Netwrck` | — |
+| OllamaSwarm | `OllamaSwarm` | Ollama-style swarm endpoint |
+| TypliAI | `TypliAI` | — |
+| WiseCat | `WiseCat` | — |
+
+### Chat — authenticated
+
+| Provider | Class | Module |
+|---|---|---|
+| AI4Chat | `AI4Chat` | `llm.ai4chat` |
+| Cerebras | `Cerebras` | `llm.Auth.cerebras` |
+| DeepAI | `DeepAI` | `llm.Auth.deep_ai` |
+| DeepInfra | `DeepInfra` | `llm.Auth.deepinfra` |
+| Groq | `Groq` | `llm.Auth.groq` |
+| HuggingFace | `HuggingFace` | `llm.Auth.huggingface` |
+| Nvidia | `Nvidia` | `llm.Auth.nvidia` |
+| OpenRouter | `OpenRouter` | `llm.Auth.openrouter` |
+| Sambanova | `Sambanova` | `llm.Auth.sambanova` |
+| TextPollinations | `TextPollinations` | `llm.Auth.textpollinations` |
+| TogetherAI | `TogetherAI` | `llm.Auth.together_ai` |
+| TwoAI | `TwoAI` | `llm.Auth.two_ai` |
+| UncensoredChat | `UncensoredChat` | `llm.Auth.uncensoredchat` |
+| Upstage | `Upstage` | `llm.Auth.upstage` |
+| Zenmux | `Zenmux` | `llm.Auth.zenmux` |
+
+### Text-to-image
+
+`BingImageAI`, `Lexica`, `MagicHourAI`, `MagicStudioAI`, `MiragicAI`, `NoLoginTool`, `OneFreeAI`, `PerchanceAI`, `PollinationsAI`, `RaphaelAI`, `StableHordeAI`, `TogetherImage`, `VisualGPT`
+
+### Text-to-speech
+
+`DeepgramTTS`, `ElevenlabsTTS` (key required), `KittenTTS`, `LuxTTS`, `MurfAITTS`, `OpenAIFMTTS`, `ParlerTTS`, `KyutaiTTS`, `QwenTTS`, `SherpaTTS`, `StreamElements`, `TTSAI`, `TTSOpenTTS`, `XLNKTTS`
+
+### Speech-to-text
+
+`ElevenLabsSTT`, `CohereSTT`
+
+### Search engines
+
+| Module | Classes |
+|---|---|
+| `llm4free.search` | `DuckDuckGoSearch`, `BingSearch`, `BraveSearch`, `YahooSearch` |
+| `llm4free.search.engines` | `Mojeek`, `Parallel`, `SerpBase`, `Wikipedia` |
+
+## Model registry
 
 ```python
 from llm4free import model
 
-# All LLM models
-all_models = model.llm.list()
-print(f"Total: {len(all_models)}")
+# Provider -> models mapping
+llm_models = model.llm.list()
+print(f"Providers: {len(llm_models)}")
 
-# Models by provider
 summary = model.llm.summary()
-print(f"Providers: {summary['providers']}, models: {summary['models']}")
-for provider, count in summary["provider_model_counts"].items():
-    print(f"  {provider}: {count}")
+print(f"Total models: {summary['models']}")
 
-# TTS voices
-voices = model.tts.list()
-print(f"Total voices: {len(voices)}")
+for provider, count in summary["provider_model_counts"].items():
+    print(f"  {provider}: {count} models")
+
+# Provider -> voices mapping
+tts_voices = model.tts.list()
+
+# Provider -> models mapping
+tti_models = model.tti.list()
 ```
 
-Model registry docs: [docs/models.md](docs/models.md)
+Detailed metadata is available through `model.llm.providers()` and `model.llm.provider("Gemini")`.
 
-<hr/>
+## OpenAI-compatible server
 
-## 🛠️ Developer Tools
+Start a local FastAPI server that exposes every wrapped backend through standard routes:
+
+```bash
+llm4free-server
+llm4free-server --port 8080 --host 0.0.0.0 --debug
+```
+
+Or from Python:
+
+```python
+from llm4free.client import run_api
+
+run_api(host="0.0.0.0", port=8000)
+```
+
+### Endpoints
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/health` | Health check |
+| `GET` | `/v1/models` | List models |
+| `GET` | `/v1/models/{model}` | Retrieve a model |
+| `GET` | `/v1/providers` | List chat providers |
+| `POST` | `/v1/chat/completions` | Chat completions (streaming supported) |
+| `POST` | `/v1/messages` | Anthropic-compatible messages |
+| `POST` | `/v1/images/generations` | Image generation |
+| `POST` | `/v1/audio/speech` | Text-to-speech |
+| `GET` | `/v1/TTI/models` | List image models |
+| `GET` | `/v1/TTS/models` | List speech models |
+| `GET` | `/search` | Unified web search |
+
+### OpenAI client
+
+```python
+from openai import OpenAI
+
+client = OpenAI(api_key="dummy", base_url="http://localhost:8000/v1")
+
+response = client.chat.completions.create(
+    model="Gemini/gemini-3.6-flash",
+    messages=[{"role": "user", "content": "Hello!"}],
+)
+print(response.choices[0].message.content)
+```
+
+### Docker Compose
+
+```bash
+docker compose up llm4free-api
+docker compose -f docker-compose.yml -f docker-compose.no-auth.yml up llm4free-api
+```
+
+> [!NOTE]
+> The server has authentication and rate limiting disabled by default. Do not expose it to untrusted networks without adding your own controls.
+
+Full reference: [docs/openai-api-server.md](docs/openai-api-server.md) | Deployment: [docs/DOCKER.md](docs/DOCKER.md)
+
+## Command-line interface
+
+```bash
+llm4free --help
+llm4free version
+
+llm4free text -k "python programming"
+llm4free images -k "mountains"
+llm4free videos -k "documentary"
+llm4free news -k "AI breakthrough"
+llm4free weather -l "New York"
+llm4free answers -k "what is quantum entanglement"
+llm4free suggestions -q "python"
+llm4free translate -k "Hola" --to en
+llm4free maps -k "coffee shops" -p "London"
+llm4free search -k "climate change" -e bing
+```
+
+### Engines
+
+| Command | Engines |
+|---|---|
+| `text` | `ddg`, `bing`, `yahoo`, `brave`, `mojeek`, `parallel`, `wikipedia`, `serpbase` |
+| `images` | `ddg`, `bing`, `yahoo`, `brave` |
+| `videos` | `ddg`, `brave`, `yahoo` |
+| `news` | `ddg`, `bing`, `yahoo`, `brave` |
+| `suggestions` | `ddg`, `bing`, `yahoo`, `brave` |
+| `answers` | `ddg` |
+| `maps` | `ddg` |
+| `translate` | `ddg` |
+| `weather` | `ddg` |
+
+```bash
+llm4free text -k "climate change" -e bing
+llm4free text -k "quantum physics" -e wikipedia
+```
+
+Full CLI reference: [docs/cli.md](docs/cli.md)
+
+## Developer tools
 
 | Tool | Description | Docs |
-|------|-------------|------|
-| [Scout](docs/scout.md) | HTML parser & web crawler | [docs/scout.md](docs/scout.md) |
-| [LitPrinter](docs/litprinter.md) | Styled debug printing | [docs/litprinter.md](docs/litprinter.md) |
-| [LitAgent](docs/litagent.md) | User-agent rotation | [docs/litagent.md](docs/litagent.md) |
-| [GitAPI](docs/gitapi.md) | GitHub data extraction | [docs/gitapi.md](docs/gitapi.md) |
-| [Decorators](docs/decorators.md) | `@timeIt` and `@retry` | [docs/decorators.md](docs/decorators.md) |
-| [Sanitize](docs/sanitize.md) | Stream sanitization | [docs/sanitize.md](docs/sanitize.md) |
-| [Prompts](docs/awesome-prompts.md) | System prompt manager | [docs/awesome-prompts.md](docs/awesome-prompts.md) |
+|---|---|---|
+| Scout | HTML parser and web crawler | [docs/scout.md](docs/scout.md) |
+| LitPrinter | Styled debug printing | [docs/litprinter.md](docs/litprinter.md) |
+| LitAgent | User-agent rotation | [docs/litagent.md](docs/litagent.md) |
+| GitAPI | GitHub data extraction | [docs/gitapi.md](docs/gitapi.md) |
+| Decorators | `@timeIt` and `@retry` | [docs/decorators.md](docs/decorators.md) |
+| Sanitize | Stream sanitization | [docs/sanitize.md](docs/sanitize.md) |
+| Prompts | System prompt manager | [docs/awesome-prompts.md](docs/awesome-prompts.md) |
 
-<hr/>
+## Configuration
 
-## 📚 Documentation
+### Client options
+
+| Option | Type | Description |
+|---|---|---|
+| `provider` | `type` | Default chat provider class |
+| `image_provider` | `type` | Default image provider class |
+| `api_key` | `str` | Key for authenticated providers |
+| `proxies` | `dict` | Proxy configuration applied to all requests |
+| `exclude` | `list[str]` | Provider names to exclude from chat |
+| `exclude_images` | `list[str]` | Provider names to exclude from images |
+| `exclude_tts` | `list[str]` | Provider names to exclude from speech |
+| `print_provider_info` | `bool` | Print the selected provider and model |
+| `drop_auth_providers` | `bool` | Exclude auth-required providers (default `True`) |
+
+### Environment variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `LLM4FREE_HOST` | `0.0.0.0` | Server bind address |
+| `LLM4FREE_PORT` | `8000` | Server port |
+| `LLM4FREE_WORKERS` | `1` | Server worker processes |
+| `LLM4FREE_LOG_LEVEL` | `info` | Server log level |
+| `LLM4FREE_DEFAULT_PROVIDER` | — | Default provider for the server |
+| `LLM4FREE_BASE_URL` | — | Base URL prefix for routes |
+| `LLM4FREE_DEBUG` | `false` | Enable debug mode |
+| `LLM4FREE_NO_UPDATE` | — | Set to `1` to disable the update check |
+
+## Project structure
+
+```
+llm4free/
+├── client.py          # Unified Client with failover and model resolution
+├── cli.py             # Rich-powered command-line interface
+├── models.py          # Model, voice, and provider registry
+├── llm/               # Chat providers (free and authenticated)
+├── TTI/               # Text-to-image providers
+├── TTS/               # Text-to-speech providers
+├── STT/               # Speech-to-text providers
+├── search/            # Search engines and result models
+├── AISEARCH/          # AI-powered search backends
+├── server/            # FastAPI OpenAI/Anthropic-compatible server
+├── Extra/             # GitAPI, temp-mail, YouTube toolkit, utilities
+├── scout/             # HTML parser and crawler
+└── litagent/          # User-agent rotation
+```
+
+## Documentation
 
 | Resource | Description |
-|----------|-------------|
-| [Getting Started](docs/getting-started.md) | Installation, first chat, web search, image generation |
-| [Architecture](docs/architecture.md) | System design, layers, and data flows |
-| [CLI Reference](docs/cli.md) | All CLI commands and options |
-| [Python Client](docs/client.md) | Unified client with auto-failover |
-| [API Server](docs/openai-api-server.md) | OpenAI-compatible FastAPI server |
-| [Model Registry](docs/models.md) | Enumerate LLM, TTS, TTI models |
-| [Tool Calling](docs/tool-calling.md) | Function calling with any provider |
-| [Search Docs](docs/search.md) | Multi-engine search API |
-| [Scout](docs/scout.md) | HTML parser and crawler |
-| [Provider Development](docs/provider-development.md) | Create custom providers |
-| [Deployment](docs/deployment.md) | Production deployment guide |
-| [Docker](docs/DOCKER.md) | Docker setup and compose profiles |
-| [Inferno](docs/inferno.md) | Local LLM server |
-| [Troubleshooting](docs/troubleshooting.md) | Common issues and solutions |
-| [Contributing](docs/contributing.md) | How to contribute |
-| [Provider Modules](llm4free/llm/) | All provider implementations |
+|---|---|
+| [Getting Started](docs/getting-started.md) | Installation and first chat |
+| [Architecture](docs/architecture.md) | System design and data flows |
+| [Client](docs/client.md) | Unified client and failover behavior |
+| [CLI Reference](docs/cli.md) | Commands and options |
+| [API Server](docs/openai-api-server.md) | OpenAI-compatible server |
+| [Model Registry](docs/models.md) | Enumerating models and voices |
+| [Tool Calling](docs/tool-calling.md) | Function calling across providers |
+| [Search](docs/search.md) | Multi-engine search API |
+| [Provider Development](docs/provider-development.md) | Writing custom providers |
+| [Deployment](docs/deployment.md) | Production deployment |
+| [Docker](docs/DOCKER.md) | Images and Compose profiles |
+| [Troubleshooting](docs/troubleshooting.md) | Common issues |
 | [Docs Hub](docs/README.md) | Full documentation index |
 
-<hr/>
+## Contributing
 
-## 🤝 Contributing
+Contributions are welcome: new providers, search engines, bug fixes, tests, and documentation.
 
-We welcome contributions — new providers, search engines, bug fixes, and docs. With 40+ providers and counting, there's always room to help.
+1. Fork the repository.
+2. Create a feature branch.
+3. Make focused changes with descriptive commits.
+4. Open a pull request.
 
-1. Fork the repository
-2. Create a feature branch
-3. Make changes with descriptive commits
-4. Submit a pull request
+See [docs/contributing.md](docs/contributing.md) and [docs/provider-development.md](docs/provider-development.md).
 
-See [docs/contributing.md](docs/contributing.md) for full guidelines, and [docs/provider-development.md](docs/provider-development.md) to add a provider.
+Please verify that any new backend complies with the target service's terms of use before submitting.
 
-<hr/>
+## License and legal
 
-## 📄 License
+Released under **Apache-2.0**. See [LICENSE.md](LICENSE.md).
 
-Released under **Apache-2.0**. See [LICENSE.md](LICENSE.md). Free for personal and commercial use.
+- [LEGAL_NOTICE.md](LEGAL_NOTICE.md) — affiliation, liability, third-party services, and user responsibilities
+- [CHANGELOG.md](CHANGELOG.md) — release history
 
 <hr/>
 
