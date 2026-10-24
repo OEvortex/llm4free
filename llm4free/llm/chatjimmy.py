@@ -40,8 +40,8 @@ class Completions(BaseCompletions):
     def create(
         self,
         *,
-        model: str = None,
-        messages: List[Dict[str, Any]] = None,
+        model: Optional[str] = None,
+        messages: Optional[List[Dict[str, Any]]] = None,
         stream: bool = False,
         **kwargs: Any,
     ) -> Union[ChatCompletion, Generator[ChatCompletionChunk, None, None]]:
@@ -125,3 +125,14 @@ class ChatJimmy(OpenAICompatibleProvider):
     @property
     def models(self):
         return SimpleModelList(type(self).AVAILABLE_MODELS)
+
+if __name__ == "__main__":
+    from rich import print
+    client = ChatJimmy()
+    result = client.chat.completions.create(
+        model=client.default_model,
+        messages=[{"role": "user", "content": "HI"}],
+        stream=True,
+    )
+    for chunk in result:
+        print(chunk, end="", flush=True)
