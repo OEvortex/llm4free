@@ -26,11 +26,6 @@ AVAILABLE_MODELS = [
     "Meta-Llama-3-3-70B-Instruct",
 ]
 
-MODEL_MAP = {
-    "DeepSeek-V4-Flash": "openai-gpt-oss-120b",
-    "gpt-oss-120b": "openai-gpt-oss-120b",
-}
-
 
 class Completions(BaseCompletions):
     def __init__(self, client: "AkashGPT"):
@@ -49,7 +44,6 @@ class Completions(BaseCompletions):
         proxies: Optional[dict] = None,
         **kwargs: Any,
     ) -> Union[ChatCompletion, Generator[ChatCompletionChunk, None, None]]:
-        model = MODEL_MAP.get(model, model)
         if model not in AVAILABLE_MODELS:
             model = AVAILABLE_MODELS[0]
         request_id = f"chatcmpl-{uuid.uuid4()}"
