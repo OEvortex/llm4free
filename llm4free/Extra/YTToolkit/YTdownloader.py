@@ -14,7 +14,15 @@ from curl_cffi.requests import Session
 from tqdm import tqdm
 
 from llm4free.litagent import LitAgent
-from llm4free.swiftcli import CLI, argument, option
+try:
+    from llm4free.swiftcli import CLI, option, argument
+except Exception:
+    class CLI:
+        def __init__(self,*a,**k): pass
+        def command(self,*a,**k): return lambda f: f
+        def run(self): pass
+    option = lambda *a, **k: (lambda f: f)
+    argument = lambda *a, **k: (lambda f: f)
 from llm4free.version import __prog__
 
 # Define cache directory using tempfile

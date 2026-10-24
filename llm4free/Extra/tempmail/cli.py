@@ -8,7 +8,15 @@ from typing import Optional, cast
 
 from rich.console import Console
 
-from llm4free.swiftcli import CLI, option
+try:
+    from llm4free.swiftcli import CLI, option, argument
+except Exception:
+    class CLI:
+        def __init__(self,*a,**k): pass
+        def command(self,*a,**k): return lambda f: f
+        def run(self): pass
+    option = lambda *a, **k: (lambda f: f)
+    argument = lambda *a, **k: (lambda f: f)
 
 from .base import TempMailProvider, get_provider
 

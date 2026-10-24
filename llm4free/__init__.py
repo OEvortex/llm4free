@@ -13,7 +13,6 @@ from .models import model
 from .scout import *
 from .search import *
 from .STT import *  # noqa: F403
-from .swiftcli import *
 from .TTI import *
 from .TTS import *
 from .update_checker import check_for_updates

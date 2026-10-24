@@ -18,7 +18,6 @@ from .search import (
     Wikipedia,
     YahooSearch,
 )
-from .swiftcli import CLI, option
 from .version import __version__
 
 console = Console()
@@ -364,22 +363,13 @@ def _print_weather(data: Dict[str, Any]) -> None:
         console.print(forecast_table)
 
 
-app: CLI = CLI(name="llm4free", help="Search the web with a simple UI", version=__version__)
+import argparse
 
-
-@app.command()
 def version() -> None:
     """Show the version of llm4free."""
     rprint(f"[bold cyan]llm4free version:[/bold cyan] {__version__}")
 
 
-@app.command()
-@option("--keywords", "-k", help="Search keywords", required=True)
-@option("--engine", "-e", help="Search engine (ddg, bing, yahoo, brave, etc.)", default="ddg")
-@option("--region", "-r", help="Region for search results", default=None)
-@option("--safesearch", "-s", help="SafeSearch setting", default="moderate")
-@option("--timelimit", "-t", help="Time limit for results", default=None)
-@option("--max-results", "-m", help="Maximum number of results", type=int, default=10)
 def text(
     keywords: str,
     engine: str,
@@ -420,10 +410,6 @@ def text(
         rprint(f"[bold red]Error:[/bold red] {str(e)}")
 
 
-@app.command()
-@option("--keywords", "-k", help="Search keywords", required=True)
-@option("--engine", "-e", help="Search engine (ddg, bing, yahoo, brave)", default="ddg")
-@option("--max-results", "-m", help="Maximum number of results", type=int, default=10)
 def images(keywords: str, engine: str, max_results: int) -> None:
     """Perform an images search."""
     try:
@@ -438,10 +424,6 @@ def images(keywords: str, engine: str, max_results: int) -> None:
         rprint(f"[bold red]Error:[/bold red] {str(e)}")
 
 
-@app.command()
-@option("--keywords", "-k", help="Search keywords", required=True)
-@option("--engine", "-e", help="Search engine (ddg, yahoo, brave)", default="ddg")
-@option("--max-results", "-m", help="Maximum number of results", type=int, default=10)
 def videos(keywords: str, engine: str, max_results: int) -> None:
     """Perform a videos search."""
     try:
@@ -456,10 +438,6 @@ def videos(keywords: str, engine: str, max_results: int) -> None:
         rprint(f"[bold red]Error:[/bold red] {str(e)}")
 
 
-@app.command()
-@option("--keywords", "-k", help="Search keywords", required=True)
-@option("--engine", "-e", help="Search engine (ddg, bing, yahoo, brave)", default="ddg")
-@option("--max-results", "-m", help="Maximum number of results", type=int, default=10)
 def news(keywords: str, engine: str, max_results: int) -> None:
     """Perform a news search."""
     try:
@@ -474,9 +452,6 @@ def news(keywords: str, engine: str, max_results: int) -> None:
         rprint(f"[bold red]Error:[/bold red] {str(e)}")
 
 
-@app.command()
-@option("--location", "-l", help="Location to get weather for", required=True)
-@option("--engine", "-e", help="Search engine (ddg, yahoo)", default="ddg")
 def weather(location: str, engine: str) -> None:
     """Get weather information."""
     try:
@@ -491,9 +466,6 @@ def weather(location: str, engine: str) -> None:
         rprint(f"[bold red]Error:[/bold red] {str(e)}")
 
 
-@app.command()
-@option("--keywords", "-k", help="Search keywords", required=True)
-@option("--engine", "-e", help="Search engine (ddg, yahoo)", default="ddg")
 def answers(keywords: str, engine: str) -> None:
     """Perform an answers search."""
     try:
@@ -508,9 +480,6 @@ def answers(keywords: str, engine: str) -> None:
         rprint(f"[bold red]Error:[/bold red] {str(e)}")
 
 
-@app.command()
-@option("--query", "-q", help="Search query", required=True)
-@option("--engine", "-e", help="Search engine (ddg, bing, yahoo, yep, brave)", default="ddg")
 def suggestions(query: str, engine: str) -> None:
     """Get search suggestions."""
     try:
@@ -525,11 +494,6 @@ def suggestions(query: str, engine: str) -> None:
         rprint(f"[bold red]Error:[/bold red] {str(e)}")
 
 
-@app.command()
-@option("--keywords", "-k", help="Text for translation", required=True)
-@option("--from-lang", "-f", help="Language to translate from", default=None)
-@option("--to", "-t", help="Language to translate to", default="en")
-@option("--engine", "-e", help="Search engine (ddg, yahoo)", default="ddg")
 def translate(
     keywords: str, from_lang: Optional[str] = None, to: str = "en", engine: str = "ddg"
 ) -> None:
@@ -546,11 +510,6 @@ def translate(
         rprint(f"[bold red]Error:[/bold red] {str(e)}")
 
 
-@app.command()
-@option("--keywords", "-k", help="Search keywords", required=True)
-@option("--place", "-p", help="Place name")
-@option("--radius", "-r", help="Search radius (km)", type=int, default=0)
-@option("--engine", "-e", help="Search engine (ddg, yahoo)", default="ddg")
 def maps(keywords: str, place: Optional[str] = None, radius: int = 0, engine: str = "ddg") -> None:
     """Perform a maps search."""
     try:
@@ -566,24 +525,101 @@ def maps(keywords: str, place: Optional[str] = None, radius: int = 0, engine: st
 
 
 # Keep search for compatibility/convenience
-@app.command()
-@option("--keywords", "-k", help="Search keywords", required=True)
-@option("--engine", "-e", help="Search engine", default="ddg")
-@option("--max-results", "-m", help="Maximum results", type=int, default=10)
 def search(keywords: str, engine: str, max_results: int) -> None:
     """Unified search command across all engines."""
     # Call the local `text` function implementation (not a command object)
     text(keywords=keywords, engine=engine, max_results=max_results)
 
+def _build_parser():
+    parser = argparse.ArgumentParser(prog="llm4free", description="Search the web with a simple UI")
+    parser.add_argument("--version", action="version", version=__version__)
+    sub = parser.add_subparsers(dest="command")
+
+    # version
+    sub.add_parser("version", help="Show the version of llm4free.")
+
+    def add_common(sp, extra=()):
+        pass
+
+    # text
+    p_text = sub.add_parser("text", help="Perform a text search.")
+    p_text.add_argument("--keywords", "-k", required=True, help="Search keywords")
+    p_text.add_argument("--engine", "-e", default="ddg", help="Search engine (ddg, bing, yahoo, brave, etc.)")
+    p_text.add_argument("--region", "-r", default=None, help="Region for search results")
+    p_text.add_argument("--safesearch", "-s", default="moderate", help="SafeSearch setting")
+    p_text.add_argument("--timelimit", "-t", default=None, help="Time limit for results")
+    p_text.add_argument("--max-results", "-m", type=int, default=10, help="Maximum number of results")
+    p_text.set_defaults(func=lambda a: text(keywords=a.keywords, engine=a.engine, region=a.region, safesearch=a.safesearch, timelimit=a.timelimit, max_results=a.max_results))
+
+    p_img = sub.add_parser("images", help="Perform an images search.")
+    p_img.add_argument("--keywords", "-k", required=True)
+    p_img.add_argument("--engine", "-e", default="ddg")
+    p_img.add_argument("--max-results", "-m", type=int, default=10)
+    p_img.set_defaults(func=lambda a: images(keywords=a.keywords, engine=a.engine, max_results=a.max_results))
+
+    p_vid = sub.add_parser("videos", help="Perform a videos search.")
+    p_vid.add_argument("--keywords", "-k", required=True)
+    p_vid.add_argument("--engine", "-e", default="ddg")
+    p_vid.add_argument("--max-results", "-m", type=int, default=10)
+    p_vid.set_defaults(func=lambda a: videos(keywords=a.keywords, engine=a.engine, max_results=a.max_results))
+
+    p_news = sub.add_parser("news", help="Perform a news search.")
+    p_news.add_argument("--keywords", "-k", required=True)
+    p_news.add_argument("--engine", "-e", default="ddg")
+    p_news.add_argument("--max-results", "-m", type=int, default=10)
+    p_news.set_defaults(func=lambda a: news(keywords=a.keywords, engine=a.engine, max_results=a.max_results))
+
+    p_weather = sub.add_parser("weather", help="Get weather information.")
+    p_weather.add_argument("--location", "-l", required=True)
+    p_weather.add_argument("--engine", "-e", default="ddg")
+    p_weather.set_defaults(func=lambda a: weather(location=a.location, engine=a.engine))
+
+    p_ans = sub.add_parser("answers", help="Perform an answers search.")
+    p_ans.add_argument("--keywords", "-k", required=True)
+    p_ans.add_argument("--engine", "-e", default="ddg")
+    p_ans.set_defaults(func=lambda a: answers(keywords=a.keywords, engine=a.engine))
+
+    p_sug = sub.add_parser("suggestions", help="Get search suggestions.")
+    p_sug.add_argument("--query", "-q", required=True)
+    p_sug.add_argument("--engine", "-e", default="ddg")
+    p_sug.set_defaults(func=lambda a: suggestions(query=a.query, engine=a.engine))
+
+    p_tr = sub.add_parser("translate", help="Perform translation.")
+    p_tr.add_argument("--keywords", "-k", required=True)
+    p_tr.add_argument("--from-lang", "-f", default=None, dest="from_lang")
+    p_tr.add_argument("--to", "-t", default="en")
+    p_tr.add_argument("--engine", "-e", default="ddg")
+    p_tr.set_defaults(func=lambda a: translate(keywords=a.keywords, from_lang=a.from_lang, to=a.to, engine=a.engine))
+
+    p_maps = sub.add_parser("maps", help="Perform a maps search.")
+    p_maps.add_argument("--keywords", "-k", required=True)
+    p_maps.add_argument("--place", "-p", default=None)
+    p_maps.add_argument("--radius", "-r", type=int, default=0)
+    p_maps.add_argument("--engine", "-e", default="ddg")
+    p_maps.set_defaults(func=lambda a: maps(keywords=a.keywords, place=a.place, radius=a.radius, engine=a.engine))
+
+    p_search = sub.add_parser("search", help="Unified search command across all engines.")
+    p_search.add_argument("--keywords", "-k", required=True)
+    p_search.add_argument("--engine", "-e", default="ddg")
+    p_search.add_argument("--max-results", "-m", type=int, default=10)
+    p_search.set_defaults(func=lambda a: search(keywords=a.keywords, engine=a.engine, max_results=a.max_results))
+
+    return parser
 
 def main():
-    """Main entry point for the CLI."""
+    parser = _build_parser()
+    args = parser.parse_args()
+    if args.command == "version":
+        version()
+        return
+    if not hasattr(args, "func"):
+        parser.print_help()
+        return
     try:
-        app.run()
+        args.func(args)
     except Exception as e:
         rprint(f"[bold red]CLI Error:[/bold red] {str(e)}")
         sys.exit(1)
-
 
 if __name__ == "__main__":
     main()

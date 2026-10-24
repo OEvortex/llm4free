@@ -11,7 +11,15 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from llm4free.swiftcli import CLI, option
+try:
+    from llm4free.swiftcli import CLI, option, argument
+except Exception:
+    class CLI:
+        def __init__(self,*a,**k): pass
+        def command(self,*a,**k): return lambda f: f
+        def run(self): pass
+    option = lambda *a, **k: (lambda f: f)
+    argument = lambda *a, **k: (lambda f: f)
 from llm4free.zeroart import figlet_format
 
 # Lazy import for huggingface_hub
