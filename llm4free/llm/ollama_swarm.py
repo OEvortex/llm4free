@@ -8,7 +8,7 @@ Usage::
     from llm4free.llm.ollama_swarm import OllamaSwarm
     client = OllamaSwarm()
     resp = client.chat.completions.create(
-        model="qwen3:14b",
+        model="beam:cloud",
         messages=[{"role": "user", "content": "Tell me a joke"}],
     )
     print(resp.choices[0].message.content)
@@ -52,41 +52,8 @@ DEFAULT_TTFT_TIMEOUT = 10.0
 
 _DEFAULT_SEED_SERVERS: List[str] = [
     "http://116.203.177.162:11434",
-    "http://117.50.171.144:11434",
-    "http://133.4.188.2:11434",
-    "http://136.243.60.49:11434",
-    "http://152.53.93.215:11434",
-    "http://158.101.214.195:11434",
-    "http://163.172.212.132:11434",
-    "http://165.1.76.13:11434",
-    "http://168.235.74.31:11434",
-    "http://193.237.153.60:11434",
     "http://193.237.205.200:11434",
-    "http://199.79.202.22:11434",
-    "http://2.59.170.202:11434",
-    "http://20.246.91.177:11434",
-    "http://210.59.176.82:11434",
-    "http://211.23.87.144:11434",
-    "http://213.136.76.182:11434",
-    "http://220.135.48.55:11434",
-    "http://31.70.86.211:11434",
-    "http://38.180.104.127:11434",
-    "http://45.145.42.104:11434",
-    "http://47.79.39.175:11434",
-    "http://51.178.49.219:11434",
-    "http://52.201.213.145:11434",
-    "http://54.36.111.107:11434",
-    "http://57.128.123.135:11434",
-    "http://62.45.168.106:11434",
-    "http://64.156.70.180:11434",
-    "http://64.176.39.95:11434",
-    "http://82.135.28.45:11434",
-    "http://82.165.174.61:11434",
-    "http://83.86.59.188:11434",
-    "http://84.22.103.64:11434",
-    "http://85.214.43.150:11434",
-    "http://85.214.44.11:11434",
-    "http://90.149.239.71:11434",
+    "http://117.50.171.144:11434",
 ]
 
 _FOFA_API = "https://fofa.info/api/v1/search/all"
@@ -164,38 +131,34 @@ def _fofa_discover(max_results: int = 50) -> List[str]:
 
 
 def _probe_server(url: str) -> Optional[Tuple[str, List[str]]]:
-    """Probe a server for available models using /v1/models or /api/tags."""
+    """Probe a server for available beam model."""
     with requests.Session() as s:
         try:
-            # Try OpenAI-compatible /v1/models endpoint first
+            # Check OpenAI-compatible /v1/models endpoint
             r = s.get(f"{url}/v1/models", timeout=_PROBE_TIMEOUT)
             if r.ok:
                 data = r.json()
-                models = []
-                for m in data.get("data", []):
-                    model_id = m.get("id", "")
-                    if (
-                        model_id
-                        and "/attacker/" not in model_id
-                        and not model_id.startswith("model-b")
-                    ):
-                        models.append(model_id)
+                models = [
+                    m.get("id", "")
+                    for m in data.get("data", [])
+                    if m.get("id") in ("beam:cloud", "beam")
+                ]
                 if models:
-                    return url, models
+                    return url, ["beam:cloud"]
         except Exception:
             pass
 
         try:
             # Fallback to Ollama-native /api/tags endpoint
             r = s.get(f"{url}/api/tags", timeout=_PROBE_TIMEOUT)
-            r.raise_for_status()
-            models = [
-                m.get("name", "")
-                for m in r.json().get("models", [])
-                if "/attacker/" not in m.get("name", "") and not m.get("name", "").startswith("model-b")
-            ]
-            if models:
-                return url, models
+            if r.ok:
+                models = [
+                    m.get("name", "")
+                    for m in r.json().get("models", [])
+                    if m.get("name") in ("beam:cloud", "beam")
+                ]
+                if models:
+                    return url, ["beam:cloud"]
         except Exception:
             return None
     return None
@@ -256,7 +219,7 @@ class Completions(BaseCompletions):
         self,
         *,
         model: str,
-        messages: List[Dict[str, str]],
+        messages: List[Dict[str, Any]],
         max_tokens: Optional[int] = None,
         stream: bool = False,
         temperature: Optional[float] = None,
@@ -264,22 +227,21 @@ class Completions(BaseCompletions):
         timeout: Optional[int] = None,
         proxies: Optional[Dict[str, str]] = None,
         **kwargs: Any,
-    ) -> Union[ChatCompletion, Generator[ChatCompletionChunk, None, None]]:
+    ) -> Any:
         model = self._client.convert_model_name(model)
-        prompt = self._client._last_user_text(messages)
         request_id = f"chatcmpl-{uuid.uuid4().hex}"
         created_time = int(time.time())
         if stream:
-            return self._create_stream(request_id, created_time, model, prompt, timeout, proxies)
-        return self._create_non_stream(request_id, created_time, model, prompt, timeout, proxies)
+            return self._create_stream(request_id, created_time, model, messages, timeout, proxies)
+        return self._create_non_stream(request_id, created_time, model, messages, timeout, proxies)
 
-    def _post_to(self, server_url: str, model: str, prompt: str, timeout: int):
+    def _post_to(self, server_url: str, model: str, messages: List[Dict[str, Any]], timeout: int):
         url = f"{server_url}/v1/chat/completions"
         return self._client.session.post(
             url,
             json={
                 "model": model,
-                "messages": [{"role": "user", "content": prompt}],
+                "messages": messages,
                 "stream": True,
                 **({"max_tokens": self._client.max_tokens} if self._client.max_tokens else {}),
             },
@@ -292,7 +254,7 @@ class Completions(BaseCompletions):
         request_id: str,
         created_time: int,
         model: str,
-        prompt: str,
+        messages: List[Dict[str, Any]],
         timeout: Optional[int],
         proxies: Optional[Dict[str, str]],
     ) -> Generator[ChatCompletionChunk, None, None]:
@@ -302,7 +264,7 @@ class Completions(BaseCompletions):
         yielded = False
         for server_url in self._client.servers_for(model):
             try:
-                response = self._post_to(server_url, model, prompt, timeout or self._client.timeout)
+                response = self._post_to(server_url, model, messages, timeout or self._client.timeout)
                 if not response.ok:
                     continue
             except (RequestException, Exception):
@@ -376,7 +338,7 @@ class Completions(BaseCompletions):
         request_id: str,
         created_time: int,
         model: str,
-        prompt: str,
+        messages: List[Dict[str, Any]],
         timeout: Optional[int],
         proxies: Optional[Dict[str, str]],
     ) -> ChatCompletion:
@@ -384,7 +346,7 @@ class Completions(BaseCompletions):
         yielded = False
         for server_url in self._client.servers_for(model):
             try:
-                response = self._post_to(server_url, model, prompt, timeout or self._client.timeout)
+                response = self._post_to(server_url, model, messages, timeout or self._client.timeout)
                 if not response.ok:
                     continue
             except (RequestException, Exception):
@@ -423,7 +385,9 @@ class Completions(BaseCompletions):
                 continue
 
             self._client._promote(model, server_url)
-            prompt_tokens = self._client._safe_count(prompt)
+            prompt_tokens = sum(
+                self._client._safe_count(str(m.get("content", ""))) for m in messages
+            )
             completion_tokens = self._client._safe_count(full_text)
             usage = CompletionUsage(
                 prompt_tokens=prompt_tokens,
@@ -475,11 +439,7 @@ class OllamaSwarm(OpenAICompatibleProvider):
         self.chat = Chat(self)
 
     def convert_model_name(self, model: str) -> str:
-        if not model:
-            return next(iter(self._model_to_servers), "*")
-        if model in self._model_to_servers or "*" in self._model_to_servers:
-            return model
-        return model
+        return "beam:cloud"
 
     @staticmethod
     def _last_user_text(messages: List[Dict[str, str]]) -> str:
@@ -509,14 +469,10 @@ class OllamaSwarm(OpenAICompatibleProvider):
 
 if __name__ == "__main__":
     client = OllamaSwarm()
-    for _m in ["beam:cloud", "tinyllama:latest", "qwen2.5:0.5b"]:
-        try:
-            response = client.chat.completions.create(
-                model=_m,
-                messages=[{"role": "user", "content": "Tell me a joke"}],
-            )
-            if isinstance(response, ChatCompletion):
-                message = response.choices[0].message
-                print(_m, "->", (message.content if message and message.content else "")[:80])
-        except Exception as e:
-            print(_m, "ERR", e)
+    response = client.chat.completions.create(
+        model="beam:cloud",
+        messages=[{"role": "user", "content": "Tell me a joke"}],
+    )
+    if isinstance(response, ChatCompletion):
+        message = response.choices[0].message
+        print("beam:cloud ->", message.content if message and message.content else "")

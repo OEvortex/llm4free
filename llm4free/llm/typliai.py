@@ -52,7 +52,7 @@ class Completions(BaseCompletions):
         timeout: Optional[int] = None,
         proxies: Optional[Dict[str, str]] = None,
         **kwargs: Any,
-    ) -> Union[ChatCompletion, Generator[ChatCompletionChunk, None, None]]:
+    ) -> Any:
         """
         Creates a model response for the given chat conversation.
         """
@@ -250,17 +250,31 @@ class TypliAI(OpenAICompatibleProvider):
 
     AVAILABLE_MODELS = [
         "openai/gpt-4o-mini",
-        "openai/gpt-4.1-mini",
-        "openai/gpt-4.1",
-        "openai/gpt-5-nano",
-        "openai/gpt-5-mini",
-        "openai/gpt-5.2",
-        "openai/gpt-5.2-pro",
+        "openai/gpt-5.4-pro",
+        "openai/gpt-5.6-terra-pro",
+        "openai/gpt-5.5-pro",
+        "openai/gpt-6-astra-pro",
+        "openai/gpt-5.6-sol-pro",
+        "openai/gpt-5.6-luna-pro",
+        "google/gemini-3.1-flash-lite",
         "google/gemini-2.5-flash",
-        "anthropic/claude-haiku-4-5",
-        "xai/grok-4-fast-reasoning",
-        "xai/grok-4-fast",
+        "google/gemini-3.8-flash-pro",
+        "google/gemini-3.1-pro",
+        "anthropic/claude-fable-5-1-pro",
+        "anthropic/claude-opus-5-5-pro",
+        "anthropic/claude-opus-5-pro",
+        "anthropic/claude-sonnet-5-5-pro",
+        "anthropic/claude-sonnet-5-pro",
+        "anthropic/claude-opus-4-8-pro",
+        "anthropic/claude-sonnet-4-6-pro",
+        "xai/grok-4.6-pro",
+        "xai/grok-4.5-pro",
+        "xai/grok-4.3",
+        "deepseek/deepseek-v4-1-flash-pro",
         "moonshotai/kimi-k2.5",
+        "moonshotai/kimi-k2.6",
+        "moonshotai/kimi-k3-pro",
+        "alibaba/qwen-3.8-max-pro",
         "alibaba/qwen-3-235b",
     ]
 

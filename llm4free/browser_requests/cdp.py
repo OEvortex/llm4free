@@ -73,11 +73,10 @@ def _run_agent_browser(
 
     if session_id is not None:
         cmd += ["--session", session_id]
-    if headless and "--headed" not in args:
-        # agent-browser defaults to headless; nothing to add. Headed opt-in is
-        # handled by callers passing headless=False which we surface below.
-        pass
     cmd += list(args)
+
+    if not headless and "--headed" not in args:
+        cmd += ["--headed"]
 
     try:
         proc = subprocess.run(
