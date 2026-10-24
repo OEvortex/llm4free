@@ -24,6 +24,7 @@ The credential is used as the proxy *username* and the literal password is
 """
 
 from __future__ import annotations
+from llm4free import LitAgent
 
 import asyncio
 import random

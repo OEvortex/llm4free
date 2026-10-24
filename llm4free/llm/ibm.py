@@ -365,7 +365,7 @@ class IBM(OpenAICompatibleProvider):
                 "Sec-Fetch-Dest": "empty",
                 "Sec-Fetch-Mode": "cors",
                 "Sec-Fetch-Site": "cross-site",
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "User-Agent": LitAgent().random(),
                 "Sec-CH-UA": '"Not)A;Brand";v="99", "Google Chrome";v="120", "Chromium";v="120"',
                 "Sec-CH-UA-Mobile": "?0",
                 "Sec-CH-UA-Platform": '"Windows"',

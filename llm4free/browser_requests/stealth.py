@@ -7,6 +7,7 @@ Centralizes the pieces that must stay in sync across engines:
 """
 
 from __future__ import annotations
+from llm4free import LitAgent
 
 import os
 import re

@@ -1,6 +1,7 @@
 """Brave text search."""
 
 from __future__ import annotations
+from llm4free import LitAgent
 
 from time import sleep
 from typing import List, Optional

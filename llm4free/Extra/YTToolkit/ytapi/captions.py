@@ -4,6 +4,7 @@ This module wraps the YTTranscriber for a simplified interface.
 """
 
 import re
+from llm4free import LitAgent
 from typing import Any, Dict, List, Optional
 
 from curl_cffi.requests import Session
@@ -57,7 +58,7 @@ class Captions:
         try:
             session = Session()
             session.headers.update(
-                {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+                {"User-Agent": LitAgent().random()}
             )
 
             fetcher = TranscriptListFetcher(session)

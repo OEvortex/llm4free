@@ -1,4 +1,5 @@
 import json
+from llm4free import LitAgent
 import time
 import uuid
 from typing import Any, Dict, Generator, List, Optional, cast
@@ -232,7 +233,7 @@ class TwoAI(OpenAICompatibleProvider):
         self.api_key = api_key
 
         headers: Dict[str, str] = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0",
+            "User-Agent": LitAgent().random(),
             "Accept": "application/json",
             "Accept-Encoding": "gzip, deflate, br, zstd",
             "Accept-Language": "en-US,en;q=0.9,en-IN;q=0.8",

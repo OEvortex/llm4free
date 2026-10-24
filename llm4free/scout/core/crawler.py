@@ -105,7 +105,7 @@ class ScoutCrawler:
 
             class _SimpleAgent:
                 def generate_fingerprint(self) -> Dict[str, str]:
-                    return {"user_agent": "Mozilla/5.0"}
+                    return {"user_agent": LitAgent().random()}
 
                 def chrome(self) -> str:
                     return "Mozilla/5.0"

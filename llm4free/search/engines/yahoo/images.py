@@ -1,6 +1,7 @@
 """Yahoo image search engine with advanced filters."""
 
 from __future__ import annotations
+from llm4free import LitAgent
 
 from collections.abc import Mapping
 from typing import Any, Optional
@@ -30,7 +31,7 @@ class YahooImages(YahooSearchEngine[ImagesResult]):
     search_url = "https://images.search.yahoo.com/search/images"
     search_method = "GET"
     search_headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+        "User-Agent": LitAgent().random()
     }
 
     # XPath selectors

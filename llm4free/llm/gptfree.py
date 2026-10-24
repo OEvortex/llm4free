@@ -1,4 +1,5 @@
 import base64
+from llm4free import LitAgent
 import json
 import time
 import uuid
@@ -186,7 +187,7 @@ class Completions(BaseCompletions):
             "sec-fetch-dest": "empty",
             "sec-fetch-mode": "cors",
             "sec-fetch-site": "cross-site",
-            "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+            "user-agent": LitAgent().random(),
             "Authorization": f"Bearer {firebase_token}",
         }
         response = self._client.session.post(

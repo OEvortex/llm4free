@@ -14,6 +14,7 @@ so no request-signing or Turnstile reverse-engineering is required here.
 """
 
 from __future__ import annotations
+from llm4free import LitAgent
 
 import asyncio
 import json
@@ -48,10 +49,7 @@ RESET = "\033[0m"
 
 CHATGPT_BASE_URL = "https://chatgpt.com/"
 # A real Chrome UA is required: Cloudflare rejects the default HeadlessChrome UA.
-CHATGPT_USER_AGENT = (
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36"
-)
+CHATGPT_USER_AGENT = LitAgent().random()
 DEFAULT_TIMEOUT = 180
 
 # Console markers emitted by the in-page script.

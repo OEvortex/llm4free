@@ -279,7 +279,7 @@ class Zenmux(OpenAICompatibleProvider):
             headers = {
                 "Accept": "application/json",
                 "Content-Type": "application/json",
-                "User-Agent": "Mozilla/5.0",
+                "User-Agent": LitAgent().random(),
             }
             try:
                 from curl_cffi.requests import Session as CurlSession

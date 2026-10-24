@@ -3,6 +3,7 @@
 
 This is a standard agent-browser plugin: it reads ONE JSON request envelope
 from stdin and writes ONE JSON response to stdout. agent-browser registers it
+from llm4free import LitAgent
 automatically for every *local* launch (``open`` on a fresh browser) and
 applies the launch mutation below, which is what lets Cloudflare Turnstile
 resolve in a headless browser:

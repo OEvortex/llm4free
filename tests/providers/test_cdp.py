@@ -6,6 +6,7 @@ and parse the JSON output contract of the agent-browser CLI.
 """
 
 import asyncio
+from llm4free import LitAgent
 import base64
 import json
 import subprocess

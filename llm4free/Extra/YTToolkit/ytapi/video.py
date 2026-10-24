@@ -1,4 +1,5 @@
 import json
+from llm4free import LitAgent
 import re
 from typing import Any, Dict, Generator, List, Optional
 
@@ -9,7 +10,7 @@ try:
 
     _USER_AGENT = LitAgent().random()
 except ImportError:
-    _USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    _USER_AGENT = LitAgent().random()
 
 
 class Video:

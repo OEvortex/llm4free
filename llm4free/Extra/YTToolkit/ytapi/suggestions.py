@@ -1,6 +1,7 @@
 """YouTube search suggestions and autocomplete."""
 
 import json
+from llm4free import LitAgent
 from typing import List, Optional
 from urllib.parse import quote
 from urllib.request import Request, urlopen
@@ -10,7 +11,7 @@ try:
 
     _USER_AGENT = LitAgent().random()
 except ImportError:
-    _USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    _USER_AGENT = LitAgent().random()
 
 
 class Suggestions:
