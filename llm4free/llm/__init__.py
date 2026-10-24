@@ -41,7 +41,6 @@ from llm4free.llm.gemini import Gemini
 from llm4free.llm.gptfree import GptFree
 from llm4free.llm.ibm import IBM
 from llm4free.llm.k2think import K2Think
-from llm4free.llm.llmchat import LLMChat
 from llm4free.llm.miklium import Miklium
 from llm4free.llm.netwrck import Netwrck
 from llm4free.llm.ollama_swarm import OllamaSwarm
@@ -123,7 +122,6 @@ __all__ = [
     "IBM",
     "ChatJimmy",
     "K2Think",
-    "LLMChat",
     "Netwrck",
     "Nvidia",
     "OllamaSwarm",
