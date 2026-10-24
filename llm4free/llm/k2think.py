@@ -36,6 +36,8 @@ from llm4free.llm.utils import (
     Choice,
     ChoiceDelta,
     CompletionUsage,
+    ToolCall,
+    ToolFunction,
 )
 
 # K2 Horizon streams its reasoning inside HTML-like <details> blocks.  During
@@ -107,6 +109,8 @@ class Completions(BaseCompletions):
         stream: bool = False,
         temperature: Optional[float] = None,
         top_p: Optional[float] = None,
+        tools: Optional[List[Any]] = None,
+        tool_choice: Optional[Any] = None,
         timeout: Optional[int] = None,
         proxies: Optional[Dict[str, str]] = None,
         **kwargs: Any,
@@ -135,6 +139,10 @@ class Completions(BaseCompletions):
             payload["temperature"] = temperature
         if top_p is not None:
             payload["top_p"] = top_p
+        if tools is not None:
+            payload["tools"] = tools
+        if tool_choice is not None:
+            payload["tool_choice"] = tool_choice
 
         if stream:
             return self._handle_streaming_response(
@@ -291,11 +299,26 @@ class Completions(BaseCompletions):
                 cleaned_content = _strip_thinking(raw_content)
                 reasoning = message_d.get("reasoning") or message_d.get("reasoning_content")
 
+                tool_calls = []
+                for tool_call_d in message_d.get("tool_calls") or []:
+                    function = tool_call_d.get("function") or {}
+                    tool_calls.append(
+                        ToolCall(
+                            id=tool_call_d.get("id") or f"call_{uuid.uuid4().hex}",
+                            type=tool_call_d.get("type", "function"),
+                            function=ToolFunction(
+                                name=function.get("name", ""),
+                                arguments=function.get("arguments", "{}"),
+                            ),
+                        )
+                    )
+
                 message = ChatCompletionMessage(
                     role=message_d.get("role", "assistant"),
-                    content=cleaned_content,
+                    content=cleaned_content or None,
                     reasoning=reasoning or None,
                     reasoning_content=reasoning or None,
+                    tool_calls=tool_calls or None,
                 )
                 choice = Choice(
                     index=choice_d.get("index", 0),
@@ -312,10 +335,10 @@ class Completions(BaseCompletions):
             )
 
             return ChatCompletion(
-                id=data.get("id", request_id),
+                id=data.get("id") or request_id,
                 choices=choices,
-                created=data.get("created", created_time),
-                model=data.get("model", model),
+                created=int(data.get("created") or created_time),
+                model=data.get("model") or model,
                 usage=usage,
             )
 
