@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=42", "wheel"]
+requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -38,14 +38,13 @@ classifiers = [
     "Topic :: Utilities",
 ]
 keywords = [
-    "search", "ai", "chatbot", "llm", "language-model", "gpt", "openai",
     "gemini", "claude", "llama", "search-engine", "text-to-speech", "tts",
     "text-to-image", "tti", "weather", "youtube", "toolkit", "utilities",
     "web-search", "duckduckgo", "google", "yep"
 ]
 
 dependencies = [
-    "typing_extensions>=4.0.0",
+    "typing_extensions",
     "curl_cffi",
     "httpx",
     "tqdm",
@@ -58,10 +57,9 @@ dependencies = [
     "aiohttp",
     "litprinter",
     "pydantic",
-    "openai>=2.43.0",
-    "requests>=2.32.5",
-    "lxml>=6.0.2",
-    "tiktoken>=0.12.0",
+    "requests",
+    "lxml",
+    "tiktoken",
 ]
 
 [project.scripts]
@@ -77,34 +75,34 @@ YouTube = "https://youtube.com/@OEvortex"
 
 [project.optional-dependencies]
 dev = [
-    "ruff>=0.1.6",
-    "pytest>=8.0.0",
-    "pytest-cov>=4.1.0",
-    "mypy>=1.10.0",
-    "vulture>=2.16",
-    "numpy>=2.2.0",
+    "ruff",
+    "pytest",
+    "pytest-cov",
+    "mypy",
+    "vulture",
+    "numpy",
 ]
 api = [
-    "fastapi>=0.128.0",
-    "uvicorn[standard]>=0.40.0",
-    "starlette>=0.50.0",
+    "fastapi",
+    "uvicorn[standard]",
+    "starlette",
     "pydantic",
     "python-multipart",
     "jinja2",
-    "websockets>=11.0",
+    "websockets",
     "regex",
 ]
 models = [
-    "tokenizers>=0.23.1",
-    "safetensors>=0.8.0",
-    "huggingface-hub>=1.20.1",
+    "tokenizers",
+    "safetensors",
+    "huggingface-hub",
 ]
 
 docs = [
-    "mkdocs>=1.6.1",
-    "mkdocs-material>=9.7.6",
-    "mkdocstrings>=1.0.4",
-    "mkdocstrings-python>=2.0.5",
+    "mkdocs",
+    "mkdocs-material",
+    "mkdocstrings",
+    "mkdocstrings-python",
 ]
 all = [
     "llm4free[api,models,docs,dev]",
@@ -174,7 +172,7 @@ exclude = [
 
 [dependency-groups]
 dev = [
-    "numpy>=2.2.6",
-    "vulture>=2.16",
-    "mypy>=1.10.0",
+    "numpy",
+    "vulture",
+    "mypy",
 ]

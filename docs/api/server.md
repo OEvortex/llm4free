@@ -133,13 +133,18 @@ llm4free serve \
 
 ## Docker Deployment
 
+> [!NOTE]
+> LLM4Free does **not** publish a pre-built Docker image. Build it yourself with the
+> `Dockerfile` in this repo, or serve without Docker:
+> `pip install "llm4free[api]"` then `llm4free-server`.
+
 ```bash
-# Pull and run
-docker pull oevortex/llm4free:latest
-docker run -p 8000:8000 oevortex/llm4free
+# Build and run
+docker build -t llm4free-api .
+docker run -p 8000:8000 llm4free-api
 
 # With Docker Compose
-docker-compose up -d
+docker compose up -d
 ```
 
 ## SDK Usage

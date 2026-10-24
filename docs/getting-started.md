@@ -42,12 +42,17 @@ uv tool install llm4free        # or install as a global CLI tool
 uv run llm4free --help          # run without installing
 ```
 
-### Docker
+### Docker (build from source)
 
 ```bash
-docker pull OEvortex/llm4free:latest
-docker run -it OEvortex/llm4free:latest
+docker build -t llm4free-api .
+docker run -p 8000:8000 llm4free-api
 ```
+
+> [!NOTE]
+> LLM4Free does **not** publish a pre-built Docker image. Build it yourself with the
+> `Dockerfile` in this repo, or serve the server without Docker:
+> `pip install "llm4free[api]"` then `llm4free-server`. See [docs/DOCKER.md](DOCKER.md).
 
 ### Verify
 

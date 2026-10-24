@@ -75,9 +75,24 @@ uv tool install llm4free
 ```
 
 ```bash
-# Docker
-docker pull OEvortex/llm4free:latest
-docker run -it OEvortex/llm4free:latest
+# Build and run with Docker (see docs/DOCKER.md)
+docker build -t llm4free-api .
+docker run -p 8000:8000 llm4free-api
+```
+
+> [!NOTE]
+> LLM4Free does **not** ship a pre-built Docker image. The `Dockerfile` in this repo
+> builds the image from source (it installs `llm4free[api]` from PyPI/git at build time).
+> You can also serve LLM4Free without Docker:
+
+```bash
+# Install and run the OpenAI-compatible server directly
+pip install "llm4free[api]"
+llm4free-server --port 8000
+
+# Or with uv (recommended)
+uv pip install "llm4free[api]"
+uv run llm4free-server
 ```
 
 See [docs/DOCKER.md](docs/DOCKER.md) for full Docker deployment options including compose profiles.
@@ -371,10 +386,18 @@ print(response.choices[0].message.content)
 
 ### Docker Deployment
 
+Build and run with Docker Compose:
+
 ```bash
-docker-compose up llm4free-api
-docker-compose -f docker-compose.yml -f docker-compose.no-auth.yml up llm4free-api
+docker compose up llm4free-api
+docker compose -f docker-compose.yml -f docker-compose.no-auth.yml up llm4free-api
 ```
+
+> [!NOTE]
+> LLM4Free does **not** publish a pre-built Docker image. The `Dockerfile` in this repo
+> builds the image from source at `docker build` time. If you don't want to use Docker,
+> serve the OpenAI-compatible server directly with `pip install "llm4free[api]"` and
+> `llm4free-server`, or via `uv run llm4free-server`.
 
 Full server docs: [docs/openai-api-server.md](docs/openai-api-server.md) | Docker: [docs/DOCKER.md](docs/DOCKER.md)
 

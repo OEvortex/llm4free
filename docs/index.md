@@ -28,9 +28,15 @@ pip install -U llm4free
 # uv (recommended for developers)
 uv add llm4free
 
-# Docker
-docker pull OEvortex/llm4free:latest
+# Docker (build from source)
+docker build -t llm4free-api .
+docker run -p 8000:8000 llm4free-api
 ```
+
+> [!NOTE]
+> LLM4Free does **not** publish a pre-built Docker image. Build it yourself with the
+> `Dockerfile` in this repo, or serve the server without Docker:
+> `pip install "llm4free[api]"` then `llm4free-server`. See [docs/DOCKER.md](DOCKER.md).
 
 ### The unified Client — one client for everything
 

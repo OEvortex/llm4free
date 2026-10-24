@@ -1,5 +1,21 @@
 # Docker Setup for LLM4Free
 
+> [!IMPORTANT]
+> LLM4Free does **not** publish a pre-built Docker image on Docker Hub. The
+> `Dockerfile` in this repository builds the image from source at `docker build`
+> time (it installs `llm4free[api]` from PyPI/git during the build). You must build
+> it yourself, or serve the server without Docker:
+
+```bash
+# Serve without Docker
+pip install "llm4free[api]"
+llm4free-server --port 8000
+
+# Or with uv
+uv pip install "llm4free[api]"
+uv run llm4free-server
+```
+
 This guide covers running the LLM4Free OpenAI-compatible API server in Docker. The image is built from the repository `Dockerfile` (a multi-stage build) and configured through the `docker-compose.yml` profiles. The server runs as a non-root user and exposes a health check at `/monitor/health`.
 
 > [!NOTE]
