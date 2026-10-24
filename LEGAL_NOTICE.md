@@ -106,12 +106,7 @@ This License does not grant permission to use trade names, trademarks, service m
 ## Privacy Notice
 
 > [!NOTE]
-> LLM4Free may collect usage data and performance metrics. By using this repository, you acknowledge that:
->
-> 1. Such data collection will comply with applicable privacy laws
-> 2. You must provide appropriate privacy notices to end users
-> 3. You must obtain necessary consents for data collection
-> 4. You must implement appropriate data security measures
+> The package itself does not collect telemetry, usage analytics, or performance metrics. On startup it may query the public PyPI JSON endpoint (`https://pypi.org/pypi/llm4free/json`) to check for a newer release; set `LLM4FREE_NO_UPDATE=1` to disable that check. All other network traffic is sent directly to the third-party providers you invoke, and is governed by their own privacy policies.
 
 ---
 
@@ -145,7 +140,7 @@ If any provision of this notice is found to be unlawful, void, or unenforceable,
 <details>
 <summary><strong>Document Version Information</strong></summary>
 
-- **Last Updated**: April 14, 2025
+- **Last Updated**: October 24, 2026
 - **Version**: 1.2
 - **Document Owner**: LLM4Free Team
 </details>

@@ -796,6 +796,6 @@ These registries are used by the client's resolution and filtering logic.
 - [docs/models.md](models.md) — Model registry for LLM, TTS, and TTI discovery
 - [docs/openai-api-server.md](openai-api-server.md) — OpenAI-compatible API server
 - [docs/architecture.md](architecture.md) — System design and layer interactions
-- [Provider.md](../Provider.md) — Complete provider matrix with file locations
+- [llm4free/llm/README.md](../llm4free/llm/README.md) — Complete provider matrix with file locations
 - [docs/getting-started.md](getting-started.md) — Quick start guide
 - [docs/tool-calling.md](tool-calling.md) — Function calling with tools

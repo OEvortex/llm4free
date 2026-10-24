@@ -2,7 +2,7 @@
 > Last updated: 2025-12-20
 > Maintained by [LLM4Free](https://github.com/OEvortex/LLM4Free)
 
-LLM4Free's [`llm4free.sanitize`](../llm4free/sanitize.py:1) module provides a comprehensive suite of utilities for processing, transforming, and sanitizing data streams. These tools are designed for robust, flexible, and high-performance handling of text and byte streams, including real-time data, API responses, and streaming content from various sources.
+LLM4Free's [`llm4free.sanitize`](../llm4free/sanitize.py#L1) module provides a comprehensive suite of utilities for processing, transforming, and sanitizing data streams. These tools are designed for robust, flexible, and high-performance handling of text and byte streams, including real-time data, API responses, and streaming content from various sources.
 
 ## Table of Contents
 
@@ -19,7 +19,7 @@ LLM4Free's [`llm4free.sanitize`](../llm4free/sanitize.py:1) module provides a co
 
 ## Core Components
 
-### [`sanitize.py`](../llm4free/sanitize.py:1)
+### [`sanitize.py`](../llm4free/sanitize.py#L1)
 
 The main sanitization module that provides comprehensive stream processing capabilities.
 
@@ -43,7 +43,7 @@ for item in gen:
 
 ## Main Function
 
-### [`sanitize_stream()`](../llm4free/sanitize.py:684)
+### [`sanitize_stream()`](../llm4free/sanitize.py#L684)
 
 The main entry point for stream processing that handles multiple data types and processing modes.
 
@@ -108,7 +108,7 @@ def sanitize_stream(
 
 ### Supported Encodings
 
-The [`EncodingType`](../llm4free/sanitize.py:20) supports a wide range of character encodings:
+The [`EncodingType`](../llm4free/sanitize.py#L20) supports a wide range of character encodings:
 - **Unicode**: `utf-8`, `utf-16`, `utf-32`
 - **ASCII/Latin**: `ascii`, `latin1`, `iso-8859-1`, `iso-8859-2`
 - **Windows**: `cp1252`, `windows-1250`, `windows-1251`, `windows-1252`
@@ -180,7 +180,7 @@ result = list(sanitize_stream({"key": "value"}, object_mode="as_is"))
 
 ## Internal Functions
 
-### [`_compile_regexes(patterns)`](../llm4free/sanitize.py:24)
+### [`_compile_regexes(patterns)`](../llm4free/sanitize.py#L24)
 
 Compiles regex patterns for efficient matching.
 
@@ -193,7 +193,7 @@ Compiles regex patterns for efficient matching.
 **Raises:**
 - `ValueError`: If any pattern is invalid
 
-### [`_process_chunk(...)`](../llm4free/sanitize.py:54)
+### [`_process_chunk(...)`](../llm4free/sanitize.py#L54)
 
 Core chunk processing function that handles sanitization and parsing.
 
@@ -206,7 +206,7 @@ Core chunk processing function that handles sanitization and parsing.
 6. JSON parsing (`to_json`)
 7. Error handling (`error_handler`)
 
-### [`_decode_byte_stream(byte_iterator, ...)`](../llm4free/sanitize.py:154)
+### [`_decode_byte_stream(byte_iterator, ...)`](../llm4free/sanitize.py#L154)
 
 Synchronous byte stream decoder with flexible encoding support.
 
@@ -216,15 +216,15 @@ Synchronous byte stream decoder with flexible encoding support.
 - Performance optimization with memory views
 - Support for multiple character encodings
 
-### [`_decode_byte_stream_async(byte_iterator, ...)`](../llm4free/sanitize.py:217)
+### [`_decode_byte_stream_async(byte_iterator, ...)`](../llm4free/sanitize.py#L217)
 
 Asynchronous counterpart to the synchronous byte decoder.
 
-### [`_sanitize_stream_sync(...)`](../llm4free/sanitize.py:273)
+### [`_sanitize_stream_sync(...)`](../llm4free/sanitize.py#L273)
 
 Synchronous stream processing engine with advanced filtering and transformation capabilities.
 
-### [`_sanitize_stream_async(...)`](../llm4free/sanitize.py:468)
+### [`_sanitize_stream_async(...)`](../llm4free/sanitize.py#L468)
 
 Asynchronous stream processing engine that mirrors synchronous functionality.
 
@@ -646,9 +646,9 @@ test_sanitize_config(test_data, intro_value="data:", to_json=True)
 
 The module provides several aliases for decorator usage:
 
-- [`sanitize_stream_decorator`](../llm4free/sanitize.py:1000): Full decorator function
-- [`lit_streamer`](../llm4free/sanitize.py:1001): Short alias for decorator
-- [`LITSTREAM`](../llm4free/sanitize.py:997): Alias for main function
+- [`sanitize_stream_decorator`](../llm4free/sanitize.py#L1000): Full decorator function
+- [`lit_streamer`](../llm4free/sanitize.py#L1001): Short alias for decorator
+- [`LITSTREAM`](../llm4free/sanitize.py#L997): Alias for main function
 
 ```python
 from llm4free.sanitize import LITSTREAM, lit_streamer
@@ -790,4 +790,4 @@ def clean_data_pipeline(raw_data):
     return formatted
 ```
 
-*This documentation covers the comprehensive functionality of the [`llm4free.sanitize`](../llm4free/sanitize.py:1) module. For the most up-to-date information, refer to the source code and inline documentation.*
+*This documentation covers the comprehensive functionality of the [`llm4free.sanitize`](../llm4free/sanitize.py#L1) module. For the most up-to-date information, refer to the source code and inline documentation.*

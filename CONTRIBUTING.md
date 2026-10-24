@@ -37,10 +37,12 @@ Open a feature request issue with:
 
 ## Development Setup
 
+LLM4Free requires **Python 3.10+**.
+
 ```bash
-# Clone your fork
-git clone https://github.com/YOUR_USERNAME/LLM4Free.git
-cd LLM4Free
+# Clone the repository (or your fork)
+git clone https://github.com/OEvortex/llm4free.git
+cd llm4free
 
 # Create virtual environment
 python -m venv venv
@@ -49,8 +51,11 @@ source venv/bin/activate  # or `venv\Scripts\activate` on Windows
 # Install in dev mode
 pip install -e ".[dev]"
 
-# Run tests
-pytest
+# Or with uv
+uv sync --extra dev
+
+# Run tests (only tests/test_tool_calling.py currently exists)
+pytest tests/
 ```
 
 ## Style Guidelines
@@ -62,7 +67,7 @@ pytest
 
 ```python
 def example_function(param1: str, param2: int) -> bool:
-    \"\"\"Short description.
+    """Short description.
 
     Args:
         param1: Description of param1.
@@ -70,7 +75,7 @@ def example_function(param1: str, param2: int) -> bool:
 
     Returns:
         Description of return value.
-    \"\"\"
+    """
     return True
 ```
 
@@ -78,14 +83,24 @@ def example_function(param1: str, param2: int) -> bool:
 
 ```
 llm4free/
-├── llm4free/          # Main source
-│   ├── ai/           # AI model integrations
-│   ├── search/       # Search engine wrappers
-│   ├── utils/        # Shared utilities
-│   └── cli/          # Command-line interface
-├── tests/            # Test suite
-├── docs/             # Documentation
-└── examples/         # Usage examples
+├── llm4free/              # Main package
+│   ├── llm/               # OpenAI-compatible LLM providers
+│   │   └── Auth/          # Providers that require an API key
+│   ├── search/            # Search engine implementations
+│   ├── AISEARCH/          # AI answer-search providers
+│   ├── TTI/               # Text-to-image providers
+│   ├── TTS/               # Text-to-speech providers
+│   ├── STT/               # Speech-to-text providers
+│   ├── Extra/             # Utilities (YTToolkit, tempmail, GGUF, ...)
+│   ├── scout/             # HTML parser / crawler
+│   ├── litagent/          # User-agent and fingerprint utilities
+│   ├── server/            # OpenAI-compatible API server
+│   ├── client.py          # Unified Client
+│   ├── cli.py             # Rich-powered CLI
+│   └── models.py          # Model registry
+├── tests/                 # Test suite
+├── docs/                  # Documentation
+└── examples/              # Usage examples
 ```
 
 ## Need Help?

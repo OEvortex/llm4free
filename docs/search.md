@@ -67,7 +67,7 @@ for r in results:
 | `maps`        | DuckDuckGo, Yahoo                                                   |
 
 > [!WARNING]
-> `SerpBase` requires an API key (`required_auth = True`). Parallel uses a public MCP endpoint and does not require an API key, but public access is subject to Parallel's free-tier rate limits and terms. All other engines work without authentication. The engine registry is defined in [`llm4free/search/__init__.py`](../../llm4free/search/__init__.py).
+> `SerpBase` requires an API key (`required_auth = True`). Parallel uses a public MCP endpoint and does not require an API key, but public access is subject to Parallel's free-tier rate limits and terms. All other engines work without authentication. The engine registry is defined in [`llm4free/search/__init__.py`](../llm4free/search/__init__.py).
 
 ---
 
@@ -77,10 +77,10 @@ The search engines are exported from the top-level package:
 
 ```python
 from llm4free import (
-    DuckDuckGoSearch,  # Full-featured: text, images, videos, news, maps, translate, weather, answers, suggestions
-    BingSearch,        # Text, images, news, suggestions
-    BraveSearch,       # Text, images, videos, news, suggestions
-    YahooSearch,       # Text, images, videos, news, maps, translate, weather, answers, suggestions
+    DuckDuckGoSearch,  # text, images, videos, news, weather, answers, suggestions, translate, maps
+    BingSearch,        # text, images, videos, news, answers, suggestions, translate, maps
+    BraveSearch,       # text, images, videos, news, answers, suggestions, translate, maps
+    YahooSearch,       # text, images, videos, news, weather, answers, suggestions, translate, maps
     Parallel,          # LLM-friendly text search through Parallel's public MCP endpoint
     Mojeek,            # Text only (independent European engine)
     Wikipedia,         # Text only (encyclopedia)

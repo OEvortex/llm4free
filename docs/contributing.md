@@ -625,7 +625,7 @@ Use relative paths:
 
 ```markdown
 # Instead of absolute paths
-[Getting Started](../getting-started.md)
+[Getting Started](getting-started.md)
 [API Reference](api-reference.md)
 [Provider List](api/providers.md)
 

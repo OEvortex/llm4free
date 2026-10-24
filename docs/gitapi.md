@@ -16,7 +16,7 @@ LLM4Free's GitAPI module provides a powerful, lightweight GitHub data extraction
 
 ## Core Components
 
-### [`gitapi.py`](../llm4free/Extra/GitToolkit/gitapi/__init__.py:1)
+### [`gitapi.py`](../llm4free/Extra/GitToolkit/gitapi/__init__.py#L1)
 
 The main GitHub API module that provides comprehensive GitHub data extraction capabilities.
 
@@ -677,4 +677,4 @@ for line in clean_content:
   </p>
 </div>
 
-*This documentation covers the comprehensive functionality of the [`llm4free.Extra.GitToolkit.gitapi`](../llm4free/Extra/GitToolkit/gitapi/__init__.py:1) module. For the most up-to-date information, refer to the source code and inline documentation.*
+*This documentation covers the comprehensive functionality of the [`llm4free.Extra.GitToolkit.gitapi`](../llm4free/Extra/GitToolkit/gitapi/__init__.py#L1) module. For the most up-to-date information, refer to the source code and inline documentation.*

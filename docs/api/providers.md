@@ -68,9 +68,12 @@ Client.get_free_tts_providers()
 
 ### Speech Providers (TTS)
 
-`DeepgramTTS`, `ElevenlabsTTS`, `KittenTTS`, `KyutaiTTS`, `LuxTTS`, `MurfAITTS`,
+`DeepgramTTS`, `ElevenlabsTTS`, `KittenTTS`, `LuxTTS`, `MurfAITTS`,
 `OpenAIFMTTS`, `ParlerTTS`, `PocketTTS`, `QwenTTS`, `SherpaTTS`, `StreamElements`,
 `TTSAI`, `TTSOpenTTS`, `XLNKTTS`.
+
+> `PocketTTS` subclasses `KyutaiTTS`; the latter is available from
+> `llm4free.TTS.pockettts` but is not re-exported by `llm4free.TTS`.
 
 ## Provider Selection
 

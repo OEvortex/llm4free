@@ -276,7 +276,7 @@ The client discovers providers dynamically. A representative sample:
 | `OpenRouter`    | `llm4free.llm.Auth.openrouter`       | Yes           | Multi-model provider        |
 | `TogetherAI`    | `llm4free.llm.Auth.together_ai`      | Yes           | Open models                |
 
-For the full list, see [`Provider.md`](../Provider.md) and `Client.get_chat_providers()`.
+For the full list, see [`llm4free/llm/README.md`](../llm4free/llm/README.md) and `Client.get_chat_providers()`.
 
 ---
 

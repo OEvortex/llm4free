@@ -2,7 +2,7 @@
 > Last updated: 2025-11-16
 > Maintained by [LLM4Free](https://github.com/OEvortex/LLM4Free)
 
-LLM4Free's [`AIutel.py`](../llm4free/AIutel.py:1) module provides powerful utility decorators for function timing and automatic retry logic. These decorators are designed for robust, flexible, and high-performance function enhancement, supporting both synchronous and asynchronous functions with comprehensive error handling and performance monitoring.
+LLM4Free's [`AIutel.py`](../llm4free/AIutel.py#L1) module provides powerful utility decorators for function timing and automatic retry logic. These decorators are designed for robust, flexible, and high-performance function enhancement, supporting both synchronous and asynchronous functions with comprehensive error handling and performance monitoring.
 
 ## Table of Contents
 
@@ -18,7 +18,7 @@ LLM4Free's [`AIutel.py`](../llm4free/AIutel.py:1) module provides powerful utili
 
 ## Core Decorators
 
-### [`timeIt`](../llm4free/AIutel.py:15)
+### [`timeIt`](../llm4free/AIutel.py#L15)
 
 A versatile timing decorator that measures and displays the execution time of both synchronous and asynchronous functions with colored output.
 
@@ -38,7 +38,7 @@ def my_function():
 - Preserves function metadata with `functools.wraps`
 - Zero-configuration setup
 
-### [`retry`](../llm4free/AIutel.py:69)
+### [`retry`](../llm4free/AIutel.py#L69)
 
 A configurable retry decorator that automatically retries functions on exceptions with customizable retry count and delay intervals.
 
@@ -60,7 +60,7 @@ def unreliable_function():
 
 ## Parameters Reference
 
-### [`timeIt`](../llm4free/AIutel.py:15) Parameters
+### [`timeIt`](../llm4free/AIutel.py#L15) Parameters
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
@@ -68,7 +68,7 @@ def unreliable_function():
 
 **Returns:** Decorated function with timing capabilities
 
-### [`retry`](../llm4free/AIutel.py:69) Parameters
+### [`retry`](../llm4free/AIutel.py#L69) Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -79,7 +79,7 @@ def unreliable_function():
 
 ## Function Signatures
 
-### [`timeIt` Decorator](../llm4free/AIutel.py:15)
+### [`timeIt` Decorator](../llm4free/AIutel.py#L15)
 
 ```python
 def timeIt(func: Callable) -> Callable:
@@ -93,7 +93,7 @@ def timeIt(func: Callable) -> Callable:
 - `sync_wrapper`: Handles synchronous functions
 - `async_wrapper`: Handles asynchronous functions
 
-### [`retry` Decorator](../llm4free/AIutel.py:69)
+### [`retry` Decorator](../llm4free/AIutel.py#L69)
 
 ```python
 def retry(retries: int = 3, delay: float = 1) -> Callable:
@@ -265,7 +265,7 @@ asyncio.run(main())
 
 ### Exception Propagation
 
-The [`retry`](../llm4free/AIutel.py:69) decorator handles exceptions gracefully:
+The [`retry`](../llm4free/AIutel.py#L69) decorator handles exceptions gracefully:
 
 1. **Catches all exceptions** during function execution
 2. **Logs attempt information** with exception details
@@ -314,7 +314,7 @@ except Exception as e:
 
 ### Timing Accuracy
 
-The [`timeIt`](../llm4free/AIutel.py:15) decorator uses `time.monotonic()` for timing:
+The [`timeIt`](../llm4free/AIutel.py#L15) decorator uses `time.monotonic()` for timing:
 
 - **Precision**: Microsecond accuracy (6 decimal places)
 - **Overhead**: Minimal timing overhead (~1-2 microseconds)
@@ -324,7 +324,7 @@ The [`timeIt`](../llm4free/AIutel.py:15) decorator uses `time.monotonic()` for t
 
 ### Timing Overhead
 
-The [`timeIt`](../llm4free/AIutel.py:15) decorator adds minimal overhead:
+The [`timeIt`](../llm4free/AIutel.py#L15) decorator adds minimal overhead:
 
 ```python
 @timeIt

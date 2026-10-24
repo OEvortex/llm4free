@@ -56,10 +56,10 @@ client = Client(proxies={"http": "http://localhost:8080", "https": "http://local
 | `provider` | provider class | `None` | Default chat provider class. |
 | `image_provider` | provider class | `None` | Default image provider class. |
 | `api_key` | `str` | `None` | Key passed to providers that need auth. |
-| `proxies` | `dict` | `{}` | Proxy settings applied to every provider. |
-| `exclude` | `list[str]` | `[]` | Chat provider names to skip (case-insensitive). |
-| `exclude_images` | `list[str]` | `[]` | Image provider names to skip. |
-| `exclude_tts` | `list[str]` | `[]` | TTS provider names to skip. |
+| `proxies` | `dict` | `None` | Proxy settings applied to every provider. |
+| `exclude` | `list[str]` | `None` | Chat provider names to skip (case-insensitive). |
+| `exclude_images` | `list[str]` | `None` | Image provider names to skip. |
+| `exclude_tts` | `list[str]` | `None` | TTS provider names to skip. |
 | `print_provider_info` | `bool` | `False` | Print the selected provider/model per request. |
 | `drop_auth_providers` | `bool` | `True` | Exclude `required_auth=True` providers entirely. |
 

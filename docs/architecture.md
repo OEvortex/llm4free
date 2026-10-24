@@ -130,7 +130,7 @@ flowchart TD
 | Task | Touch Points |
 |------|--------------|
 | Add a CLI command | `llm4free/cli.py` + corresponding engine/provider + update `docs/cli.md` |
-| Add a provider | Implement in `llm4free/llm/` (or `llm4free/llm/Auth/` for authenticated), update `Provider.md`, consider `models.py` exposure |
+| Add a provider | Implement in `llm4free/llm/` (or `llm4free/llm/Auth/` for authenticated), update `llm4free/llm/README.md`, consider `models.py` exposure |
 | Add server capability | Update `llm4free/server/*`, document in `docs/openai-api-server.md`, ensure CLI/Client can hit the new route if needed |
 | Extend Extras | Implement under `llm4free/Extra/`, export in `__init__.py`, add documentation entry under `docs/README.md` |
 | Add new registry info | Update `llm4free/models.py` or referencing docs (`docs/models.md`) |
@@ -152,4 +152,4 @@ flowchart TD
 - [docs/client.md](client.md) – deep dive into the unified client.
 - [docs/models.md](models.md) – using the model registry helpers.
 - [docs/openai-api-server.md](openai-api-server.md) – server configuration & endpoints.
-- [Provider.md](../Provider.md) – provider matrix you can cross-reference while navigating the codebase.
+- [llm4free/llm/README.md](../llm4free/llm/README.md) – provider matrix you can cross-reference while navigating the codebase.

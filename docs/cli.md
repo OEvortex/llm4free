@@ -1,7 +1,7 @@
 # LLM4Free CLI Reference
 
 > Source of truth: [`llm4free/cli.py`](../llm4free/cli.py)
-> Last verified against the current engine mapping: `ddg`, `bing`, `yahoo`, `brave`, `mojeek`, `wikipedia`, `serpbase`.
+> Engine map: `ddg`, `duckduckgo` (alias), `bing`, `yahoo`, `brave`, `mojeek`, `parallel`, `wikipedia`, `serpbase`.
 
 The LLM4Free CLI provides a unified interface for multiple search engines. Every search command accepts an `--engine` (or `-e`) option to choose a provider; **DuckDuckGo (`ddg`)** is the default when `-e` is omitted.
 
@@ -44,37 +44,39 @@ The CLI uses **Rich** for formatted table outputs and informative panels.
 
 ## Available Commands
 
-| Command | Description | Common Engines |
-|---------|-------------|----------------|
+| Command | Description | Engines that implement the method |
+|---------|-------------|-----------------------------------|
 | `version` | Print the installed `llm4free` version | — |
-| `text` | General web/text search | `ddg`, `bing`, `yahoo`, `brave`, `mojeek`, `wikipedia`, `serpbase` |
+| `text` | General web/text search | all nine engines |
 | `images` | Image search | `ddg`, `bing`, `yahoo`, `brave` |
-| `videos` | Video search | `ddg`, `yahoo`, `brave` |
-| `news` | News search | `ddg`, `bing`, `yahoo` |
+| `videos` | Video search | `ddg`, `bing`, `yahoo`, `brave` |
+| `news` | News search | `ddg`, `bing`, `yahoo`, `brave` |
 | `weather` | Weather information | `ddg`, `yahoo` |
-| `answers` | Instant answers | `ddg`, `yahoo` |
+| `answers` | Instant answers | `ddg`, `bing`, `yahoo`, `brave` |
 | `suggestions` | Query autocomplete | `ddg`, `bing`, `yahoo`, `brave` |
-| `translate` | Text translation | `ddg`, `yahoo` |
-| `maps` | POI / location search | `ddg`, `yahoo` |
-| `search` | Shortcut for `text` | same as `text` |
+| `translate` | Text translation | `ddg`, `bing`, `yahoo`, `brave` |
+| `maps` | POI / location search | `ddg`, `bing`, `yahoo`, `brave` |
+| `search` | Shortcut for `text` with only `-k`, `-e`, `-m` | same as `text` |
 
 > [!NOTE]
-> Each command only succeeds if the selected engine implements the corresponding method. For example, `images` works on `ddg`/`bing`/`yahoo` but will report "does not support image search" for engines that lack an `images()` method. The full engine map lives in `llm4free/cli.py` (`ENGINES`).
+> Each command only succeeds if the selected engine implements the corresponding method. For example, `images` works on `ddg`/`bing`/`yahoo`/`brave` but will report "does not support image search" for engines that lack an `images()` method. The full engine map lives in `llm4free/cli.py` (`ENGINES`).
 
 ---
 
 ## Common Options
 
-`text` (and its `search` alias) accepts these options:
+`text` (and its `search` shortcut) accepts these options:
 
 | Option | Alias | Default | Description |
 |--------|-------|---------|-------------|
 | `--keywords` | `-k` | (required) | Search query or keywords |
 | `--engine` | `-e` | `ddg` | Search engine to use |
 | `--max-results` | `-m` | `10` | Maximum number of results to display |
-| `--region` | `-r` | `wt-wt` (ddg) / `us` | Region code (e.g., `us`, `uk`, `wt-wt`) |
+| `--region` | `-r` | `None` → `wt-wt` for ddg, `us` otherwise | Region code (e.g., `us`, `uk`, `wt-wt`) |
 | `--safesearch` | `-s` | `moderate` | SafeSearch: `on` / `moderate` / `off` |
 | `--timelimit` | `-t` | (none) | Time filter: `d`, `w`, `m`, `y` |
+
+`search` only defines `-k/--keywords`, `-e/--engine`, and `-m/--max-results`; it calls `text()` with the default region, SafeSearch, and time limit.
 
 ---
 
@@ -89,7 +91,7 @@ llm4free text -k "fastapi tutorial" -e ddg -m 5
 Options: `-k/--keywords` (required), `-e/--engine` (default `ddg`), `-r/--region`, `-s/--safesearch`, `-t/--timelimit`, `-m/--max-results`.
 
 > [!TIP]
-> `search` is an alias for `text` — it forwards the same arguments to the `text` implementation.
+> `search` is a shortcut for `text` — it accepts only `-k`, `-e`, and `-m` and then calls `text()` with the default region, SafeSearch, and time limit.
 
 ### `images`
 

@@ -1,31 +1,36 @@
-<div align="center">
-  <h1>🔍 LLM4Free AI Search Providers</h1>
-  <p><strong>Powerful AI-powered search capabilities with multiple provider support</strong></p>
-</div>
+# 🔍 LLM4Free AI Search
 
-> [!NOTE]
-> AI Search Providers leverage advanced language models and search algorithms to deliver high-quality, context-aware responses with web search integration.
+Five AI-powered search providers that return synthesized answers with web/source context instead of raw result lists. All of them share the same entry point:
 
-## ✨ Features
+```python
+provider.search(prompt, stream=False, raw=False, **kwargs)
+```
 
-- **Multiple Search Providers**: Support for 6 specialized AI search services
-- **Streaming Responses**: Real-time streaming of AI-generated responses
-- **Raw Response Format**: Access to raw response data when needed
-- **Automatic Text Handling**: Smart response formatting and cleaning
-- **Robust Error Handling**: Comprehensive error management
-- **Cross-Platform Compatibility**: Works seamlessly across different environments
+- `stream=False` returns a `SearchResponse` (or a provider-specific structure for some providers)
+- `stream=True` returns a generator of chunks; when the answer is complete, the full text is also stored on `provider.last_response`
+- `raw=True` returns the unmodified provider payload/stream for custom processing
 
-## 📦 Supported Search Providers
+The providers are importable from `llm4free` (re-exported via `llm4free.AISEARCH`):
 
-| Provider | Description | Key Features |
-|----------|-------------|-------------|
-| **PERPLEXED** | Resilient AI search | High availability, clean formatting |
-| **Perplexity** | Advanced AI search & chat | Multiple modes, model selection, source control |
-| **IAsk** | Multi-mode research | Academic, Question, Fast modes, detail levels |
-| **Monica** | Comprehensive AI search | Clean formatted responses, web integration |
-| **Brave Search** | Privacy-focused AI search | Standard answers, deep research, formatted streaming |
-| **WebPilotAI** | Web-integrated analysis | Content extraction, source references |
-| **Stellar** | Agentic AI search | Next.js powered, deep search capabilities (Quota limited) |
+```python
+from llm4free import Perplexity, IAsk, Monica, webpilotai
+
+# BraveSearch is also a web-search engine at top level, so import the AI
+# search version explicitly to avoid the name collision:
+from llm4free.AISEARCH import BraveSearch
+```
+
+## 📦 Providers
+
+| Provider | Class | Constructor | Notes |
+|---|---|---|---|
+| Perplexity | `Perplexity` | `cookies=None, timeout=60, proxies=None` | Modes, source selection, model preference, follow-up context |
+| IAsk | `IAsk` | `timeout=30, proxies=None, mode="question", detail_level=None` | `question`/`academic`/`forums`/`wiki`/`thinking` modes |
+| Monica | `Monica` | `timeout=60, proxies=None` | Streamed Monica search API |
+| WebPilot | `webpilotai` | `timeout=90, proxies=None` | Lowercase class name is intentional |
+| Brave Search | `BraveSearch` | `cookies=None, timeout=60, proxies=None` | Standard answers and Deep Research |
+
+There is no `PERPLEXED`, `Stellar`, or `WebPilotAI` (capitalized) provider in the package.
 
 ## 🚀 Installation
 
@@ -33,110 +38,124 @@
 pip install -U llm4free
 ```
 
-## 💻 Quick Start Guide
-
-### Basic Usage Pattern
-
-All AI Search providers follow a consistent usage pattern:
-
-```python
-from llm4free import Perplexity
-
-# Initialize the provider
-ai = Perplexity()
-
-# Basic search
-response = ai.search("Your query here")
-print(response)  # Automatically formats the response
-
-# Streaming search
-for chunk in ai.search("Your query here", stream=True):
-    print(chunk, end="", flush=True)  # Print response as it arrives
-```
-
-### Provider Examples
-
-<details>
-<summary><strong>Perplexity Example</strong></summary>
+## 💻 Quick start
 
 ```python
 from llm4free import Perplexity
 
 ai = Perplexity()
-
-# Basic search (auto mode)
 response = ai.search("What is the weather in London?")
 print(response)
+print(ai.last_response)
+```
 
-# Streaming search
+### Streaming
+
+```python
 for chunk in ai.search("Explain black holes", stream=True):
     print(chunk, end="", flush=True)
 ```
-</details>
 
-<details>
-<summary><strong>IAsk Example</strong></summary>
+### Perplexity options
+
+```python
+ai = Perplexity(timeout=90)
+
+response = ai.search(
+    "Recent developments in battery technology",
+    sources=["web"],          # default
+    incognito=True,           # default
+    language="en-US",         # default
+    mode="auto",              # "auto" (default) or "copilot"
+    model="turbo",            # sets model_preference
+    max_retries=3,            # default
+)
+```
+
+`follow_up` can carry a previous turn:
+`{"attachments": [...], "backend_uuid": "..."}`.
+
+### IAsk
 
 ```python
 from llm4free import IAsk
 
-# Initialize with academic mode
-ai = IAsk(mode="academic")
-
+ai = IAsk(mode="academic", detail_level="detailed")
 response = ai.search("Recent developments in mRNA vaccines")
 print(response)
-```
-</details>
 
-<details>
-<summary><strong>Brave Search Example</strong></summary>
+# Override per request
+response = ai.search("CRISPR ethics", mode="thinking", detail_level="comprehensive")
+```
+
+- Modes: `question`, `academic`, `forums`, `wiki`, `thinking`
+- Detail levels: `concise`, `detailed`, `comprehensive`
+- `IAsk.create_url(prompt, mode=..., detail_level=...)` builds the underlying IAsk URL without making a request.
+
+### Monica
+
+```python
+from llm4free import Monica
+
+ai = Monica(timeout=60)
+print(ai.search("Summarize the latest climate report"))
+```
+
+### webpilotai
+
+```python
+from llm4free import webpilotai
+
+ai = webpilotai(timeout=90)
+print(ai.search("Compare vector database options"))
+```
+
+### Brave Search
 
 ```python
 from llm4free.AISEARCH import BraveSearch
 
 ai = BraveSearch(timeout=60)
 
-# Standard Brave Ask response
-response = ai.search("What is Python?")
-print(response)
+# Standard Brave answer
+print(ai.search("What is Python?"))
 
-# Formatted streaming: token deltas are combined into readable chunks
+# Formatted streaming: small upstream token deltas are grouped into readable chunks
 for chunk in ai.search("Explain Python generators", stream=True):
     print(chunk, end="", flush=True)
-
-# The complete streamed answer is also available afterward
 print(ai.last_response)
 
-# Deep Research uses a longer timeout and can take several minutes
+# Deep Research (can take several minutes)
 research = ai.search(
     "Compare the current state of web search engines",
     model="brave-deep-research",
-    stream=False,
     max_retries=3,
 )
 print(research)
 
-# Raw mode exposes the original provider stream for custom processing/debugging
+# Raw provider stream for custom parsing/debugging
 raw_stream = ai.search("What is Python?", stream=True, raw=True)
 ```
 
-`stream=True` groups small upstream token deltas into readable chunks of at most 800 characters while retaining partial words until more text arrives. Set `raw=True` when the unmodified provider lines are required. Deep Research accepts the same options and emits progress status messages alongside the final answer.
+`BraveSearch` model values are `"brave"` (default) and `"brave-deep-research"`. With `stream=True` and `raw=False`, small upstream deltas are combined into chunks of at most 800 characters while keeping partial words intact.
 
-</details>
-
-## 🛡️ Error Handling
+## 🛡️ Error handling
 
 ```python
 from llm4free import exceptions
+from llm4free import Perplexity
 
+ai = Perplexity()
 try:
     response = ai.search("Your query")
-except exceptions.APIConnectionError as e:
-    print(f"API error: {e}")
-except exceptions.FailedToGenerateResponseError as e:
-    print(f"Generation error: {e}")
+except exceptions.APIConnectionError as exc:
+    print(f"API error: {exc}")
+except exceptions.FailedToGenerateResponseError as exc:
+    print(f"Generation error: {exc}")
 ```
+
+Provider/network failures use the shared exception types in `llm4free/exceptions.py` (`APIConnectionError`, `AuthenticationError`, `RatelimitE`, `TimeoutE`, `FailedToGenerateResponseError`, `InvalidResponseError`, ...).
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+New providers should subclass `llm4free.AIbase.AISearch`, implement `search()`, keep `last_response` updated, and be exported from `llm4free/AISEARCH/__init__.py`.

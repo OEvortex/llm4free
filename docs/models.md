@@ -175,5 +175,5 @@ print(response.choices[0].message.content)
 ## Related Docs
 
 - [docs/client.md](client.md) – the unified client uses `_get_models_safely()` to enhance model resolution.
-- [Provider.md](../Provider.md) – cross-reference provider locations and normal vs OpenAI-compatible implementations.
+- [llm4free/llm/README.md](../llm4free/llm/README.md) – cross-reference provider locations and normal vs OpenAI-compatible implementations.
 - [docs/architecture.md](architecture.md) – where the registry fits within the overall system.

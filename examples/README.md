@@ -10,9 +10,17 @@ client.audio.speech.create(...)
 
 ## Setup
 
+From the repository root:
+
 ```bash
 uv sync
-# or: uv add llm4free
+# or: pip install -e ".[dev]"
+```
+
+If you only want the library outside this repository:
+
+```bash
+pip install -U llm4free
 ```
 
 Scripts that generate files write them to `examples/output/`.
@@ -41,5 +49,5 @@ uv run python examples/tool_calling.py
 - `model="auto"` picks an available provider and model.
 - `model="ProviderName/model-name"` pins a provider by name.
 - `provider=SomeProviderClass` pins a provider class for one request.
-- `print_provider_info=True` reports the provider and model used for each call.
+- `print_provider_info=True` is a `Client(...)` constructor argument that reports the provider and model used for each call.
 - The client automatically falls back to other providers when a request fails.

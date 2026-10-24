@@ -16,7 +16,7 @@ LLM4Free's Awesome Prompts Manager provides a comprehensive system for managing 
 
 ## Core Components
 
-### [`prompt_manager.py`](../llm4free/prompt_manager.py:1)
+### [`prompt_manager.py`](../llm4free/prompt_manager.py#L1)
 
 The main prompt management module that provides comprehensive prompt handling capabilities.
 
@@ -41,7 +41,7 @@ print(prompt)
 
 ## Prompt Manager
 
-### [`AwesomePrompts` Class](../llm4free/prompt_manager.py:22)
+### [`AwesomePrompts` Class](../llm4free/prompt_manager.py#L22)
 
 The main class for managing awesome prompts with caching and optimization.
 
@@ -485,4 +485,4 @@ test_manager = AwesomePrompts(
   </p>
 </div>
 
-*This documentation covers the comprehensive functionality of the [`llm4free.prompt_manager`](../llm4free/prompt_manager.py:1) module. For the most up-to-date information, refer to the source code and inline documentation.*
+*This documentation covers the comprehensive functionality of the [`llm4free.prompt_manager`](../llm4free/prompt_manager.py#L1) module. For the most up-to-date information, refer to the source code and inline documentation.*

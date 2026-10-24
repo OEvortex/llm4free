@@ -43,7 +43,7 @@ Most AI libraries lock you into **one provider** and **one way of doing things**
 - 🖼️🗣️ **Images & voice.** Text-to-image (Pollinations, Together, Stable Horde…) and text-to-speech (ElevenLabs, OpenAI FM, Qwen, Murf…) out of the box.
 - 🚀 **OpenAI-compatible server.** Serve any provider through standard `/v1` endpoints — point the official OpenAI SDK at your laptop.
 - 🧰 **Developer toolbox.** Web crawler (Scout), GitHub data toolkit, temp-mail, user-agent rotation, and more.
-- 📚 **Fully typed & documented.** 100% type-annotated public API with auto-generated MkDocs reference.
+- 📚 **Documented.** Type hints across the public API, plus a MkDocs site with guides and hand-written API reference.
 
 > [!NOTE]
 > LLM4Free is **Apache-2.0 licensed** — free for personal and commercial use.
@@ -331,13 +331,16 @@ Search docs: [docs/search.md](docs/search.md)
 ```python
 from llm4free.TTI import PollinationsAI, TogetherImage
 
-# PollinationsAI
+# PollinationsAI — no API key required
 poll = PollinationsAI()
 poll.images.create(model="flux", prompt="A cyberpunk city at night")
 
-# Together AI
-together = TogetherImage()
-together.images.create(model="auto", prompt="A robot playing chess")
+# Together AI — requires an API key and an explicit model ID
+together = TogetherImage(api_key="your-together-key")
+together.images.create(
+    model="black-forest-labs/FLUX.1-schnell",
+    prompt="A robot playing chess",
+)
 ```
 
 TTI docs: [docs/getting-started.md#image-generation](docs/getting-started.md#image-generation)
