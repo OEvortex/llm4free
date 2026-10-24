@@ -5,9 +5,10 @@ Scout HTML5 Parser - Advanced HTML5 Parsing with html5lib
 import re
 from typing import Any, Dict, List, Optional, Union, cast
 
-import html5lib
-
 from ..element import NavigableString, Tag
+
+# html5lib is an optional dependency; import lazily at runtime to avoid hard dependency
+html5lib = None
 
 
 class HTML5Parser:
@@ -24,6 +25,15 @@ class HTML5Parser:
             namespaces (bool): Whether to preserve namespace information
             debug (bool): Enable debug mode for parsing
         """
+        global html5lib
+        if html5lib is None:
+            try:
+                import importlib
+
+                html5lib = importlib.import_module("html5lib")
+            except Exception as e:
+                raise ImportError("html5lib is required for HTML5 parsing") from e
+
         self._namespaces = namespaces
         self._debug = debug
         self._parsing_errors = []

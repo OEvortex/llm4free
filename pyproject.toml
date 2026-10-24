@@ -57,7 +57,6 @@ dependencies = [
     "colorama",
     "rich",
     "PyYAML",
-    "html5lib",
     "psutil",
     "aiohttp",
     "litprinter",

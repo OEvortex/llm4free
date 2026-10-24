@@ -26,7 +26,7 @@ class DuckDuckGoSearch(BaseSearch):
         region: str = "wt-wt",
         safesearch: str = "moderate",
         timelimit: Optional[str] = None,
-        backend: str = "api",
+        backend: str = "auto",
         max_results: Optional[int] = None,
     ) -> List[TextResult]:
         search = DuckDuckGoTextSearch()

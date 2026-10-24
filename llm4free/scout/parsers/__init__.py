@@ -18,8 +18,20 @@ class ParserRegistry:
     _PARSERS: Dict[str, Type[Any]] = {
         "html.parser": HTMLParser,
         "lxml": LXMLParser,
-        "html5lib": HTML5Parser,
     }
+
+    @classmethod
+    def _ensure_html5lib(cls) -> None:
+        """Register html5lib parser only if the html5lib package is importable."""
+        if "html5lib" in cls._PARSERS:
+            return
+        try:
+            import importlib
+
+            importlib.import_module("html5lib")
+            cls._PARSERS["html5lib"] = HTML5Parser
+        except ImportError:
+            pass
 
     @classmethod
     def get_parser(cls, parser_name: str = "html.parser") -> Any:
@@ -35,6 +47,8 @@ class ParserRegistry:
         Raises:
             ValueError: If the parser is not found
         """
+        if parser_name == "html5lib":
+            cls._ensure_html5lib()
         if parser_name not in cls._PARSERS:
             raise ValueError(
                 f"Parser '{parser_name}' not found. Available parsers: {list(cls._PARSERS.keys())}"
@@ -49,7 +63,7 @@ class ParserRegistry:
 
         Args:
             name (str): Name of the parser
-            parser_class (Type): Parser class to register
+            parser_class (Type[Any]): Parser class to register
         """
         cls._PARSERS[name] = parser_class
 
@@ -61,6 +75,7 @@ class ParserRegistry:
         Returns:
             Dict of available parsers
         """
+        cls._ensure_html5lib()
         return cls._PARSERS.copy()
 
 
