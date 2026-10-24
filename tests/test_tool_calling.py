@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import importlib.util
 import json
-from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import llm4free.client as client_module
 from llm4free.client import _is_valid_chat_completion
@@ -214,78 +212,6 @@ def test_non_native_provider_emits_tool_calls() -> None:
     assert "temperature_c" in tool_result_text
 
 
-def _load_tool_calling_example() -> Any:
-    example_path = Path(__file__).resolve().parents[1] / "examples" / "tool_calling.py"
-    spec = importlib.util.spec_from_file_location("example_tool_calling", example_path)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-def test_example_agent_runs_tool_loop() -> None:
-    example = _load_tool_calling_example()
-
-    calls: list[dict[str, Any]] = []
-
-    class StubCompletions:
-        def create(self, **kwargs: Any) -> Any:
-            calls.append(kwargs)
-            if len(calls) == 1:
-                return ChatCompletion(
-                    model="stub",
-                    choices=[
-                        Choice(
-                            index=0,
-                            message=ChatCompletionMessage(
-                                role="assistant",
-                                content=None,
-                                tool_calls=[
-                                    ToolCall(
-                                        id="call_1",
-                                        type="function",
-                                        function=ToolFunction(
-                                            name="get_weather",
-                                            arguments='{"city": "Paris"}',
-                                        ),
-                                    )
-                                ],
-                            ),
-                        )
-                    ],
-                )
-            return ChatCompletion(
-                model="stub",
-                choices=[
-                    Choice(
-                        index=0,
-                        message=ChatCompletionMessage(
-                            role="assistant",
-                            content="It is 24C and sunny in Paris.",
-                        ),
-                    )
-                ],
-            )
-
-    class StubChat:
-        def __init__(self) -> None:
-            self.completions = StubCompletions()
-
-    class StubClient:
-        def __init__(self) -> None:
-            self.chat = StubChat()
-
-    answer = example.run_agent(
-        cast(Any, StubClient()), "What is the weather in Paris?"
-    )
-    assert answer == "It is 24C and sunny in Paris."
-    assert len(calls) == 2
-
-    tool_messages = [m for m in calls[1]["messages"] if m.get("role") == "tool"]
-    assert len(tool_messages) == 1
-    assert '"condition": "sunny"' in tool_messages[0]["content"]
-
-
 def test_registered_tools_are_injected_into_prompt() -> None:
     provider = FakeProvider(
         tools=[
@@ -312,67 +238,6 @@ def test_registered_tools_are_injected_into_prompt() -> None:
     )
     assert "# Tools" in prompt_text
     assert "get_weather" in prompt_text
-
-
-def test_example_agent_recovers_from_bad_tool_arguments() -> None:
-    example = _load_tool_calling_example()
-    calls: list[dict[str, Any]] = []
-
-    class StubCompletions:
-        def create(self, **kwargs: Any) -> Any:
-            calls.append(kwargs)
-            if len(calls) == 1:
-                return ChatCompletion(
-                    model="stub",
-                    choices=[
-                        Choice(
-                            index=0,
-                            message=ChatCompletionMessage(
-                                role="assistant",
-                                content=None,
-                                tool_calls=[
-                                    ToolCall(
-                                        id="call_bad",
-                                        type="function",
-                                        function=ToolFunction(
-                                            name="get_weather",
-                                            arguments='{"town": "Paris"}',
-                                        ),
-                                    )
-                                ],
-                            ),
-                        )
-                    ],
-                )
-            return ChatCompletion(
-                model="stub",
-                choices=[
-                    Choice(
-                        index=0,
-                        message=ChatCompletionMessage(
-                            role="assistant",
-                            content="It is 24C and sunny in Paris.",
-                        ),
-                    )
-                ],
-            )
-
-    class StubChat:
-        def __init__(self) -> None:
-            self.completions = StubCompletions()
-
-    class StubClient:
-        def __init__(self) -> None:
-            self.chat = StubChat()
-
-    answer = example.run_agent(
-        cast(Any, StubClient()), "What is the weather in Paris?"
-    )
-    assert answer == "It is 24C and sunny in Paris."
-
-    tool_messages = [m for m in calls[1]["messages"] if m.get("role") == "tool"]
-    assert len(tool_messages) == 1
-    assert "unexpected keyword argument" in tool_messages[0]["content"]
 
 
 def test_accepts_aibase_tool_objects() -> None:

@@ -39,7 +39,9 @@ image_prompt = (message.content if message else "") or topic
 cover = client.images.generate(prompt=image_prompt, model="auto").data[0]
 cover_path = output_dir / "cover.png"
 if cover.url:
-    urllib.request.urlretrieve(cover.url, cover_path)
+    request = urllib.request.Request(cover.url, headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(request, timeout=60) as response:
+        cover_path.write_bytes(response.read())
 elif cover.b64_json:
     cover_path.write_bytes(base64.b64decode(cover.b64_json))
 

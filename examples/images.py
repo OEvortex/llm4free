@@ -17,7 +17,11 @@ resp = client.images.generate(
 for index, image in enumerate(resp.data, start=1):
     path = output_dir / f"image_{index}.png"
     if image.url:
-        urllib.request.urlretrieve(image.url, path)
+        request = urllib.request.Request(
+            image.url, headers={"User-Agent": "Mozilla/5.0"}
+        )
+        with urllib.request.urlopen(request, timeout=60) as response:
+            path.write_bytes(response.read())
     elif image.b64_json:
         path.write_bytes(base64.b64decode(image.b64_json))
     print(path)
