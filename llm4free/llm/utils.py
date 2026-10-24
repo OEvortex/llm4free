@@ -105,7 +105,7 @@ class Choice(BaseModel, DictLikeMixin):
 
     index: StrictInt
     message: Optional[ChatCompletionMessage] = None
-    delta: Optional[ChoiceDelta] = None
+    delta: ChoiceDelta = Field(default_factory=ChoiceDelta)
     finish_reason: Optional[StrictStr] = None
     logprobs: Optional[Dict[str, Any]] = None
 

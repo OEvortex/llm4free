@@ -5,7 +5,19 @@ import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from functools import wraps
-from typing import Any, Callable, Dict, Generator, List, Optional, TypedDict, Union, cast
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Generator,
+    List,
+    Literal,
+    Optional,
+    TypedDict,
+    Union,
+    cast,
+    overload,
+)
 
 from curl_cffi import requests
 from litprinter import ic
@@ -81,6 +93,57 @@ class Tool:
 
 
 class BaseCompletions(ABC):
+    @overload
+    def create(
+        self,
+        *,
+        model: str,
+        messages: List[Dict[str, Any]],
+        max_tokens: Optional[int] = None,
+        stream: Literal[True],
+        temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
+        tools: Optional[List[Union[Tool, Dict[str, Any]]]] = None,
+        tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
+        timeout: Optional[int] = None,
+        proxies: Optional[dict] = None,
+        **kwargs: Any,
+    ) -> Generator[ChatCompletionChunk, None, None]: ...
+
+    @overload
+    def create(
+        self,
+        *,
+        model: str,
+        messages: List[Dict[str, Any]],
+        max_tokens: Optional[int] = None,
+        stream: Literal[False] = False,
+        temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
+        tools: Optional[List[Union[Tool, Dict[str, Any]]]] = None,
+        tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
+        timeout: Optional[int] = None,
+        proxies: Optional[dict] = None,
+        **kwargs: Any,
+    ) -> ChatCompletion: ...
+
+    @overload
+    def create(
+        self,
+        *,
+        model: str,
+        messages: List[Dict[str, Any]],
+        max_tokens: Optional[int] = None,
+        stream: bool = False,
+        temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
+        tools: Optional[List[Union[Tool, Dict[str, Any]]]] = None,
+        tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
+        timeout: Optional[int] = None,
+        proxies: Optional[dict] = None,
+        **kwargs: Any,
+    ) -> Union[ChatCompletion, Generator[ChatCompletionChunk, None, None]]: ...
+
     @abstractmethod
     def create(
         self,
