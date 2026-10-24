@@ -1,3 +1,4 @@
+from litprinter import ic
 """
 Requests package for llm4free.
 
@@ -17,7 +18,6 @@ Engines (``CDPSession(engine=...)`` or ``LLM4FREE_BROWSER_ENGINE``):
 """
 
 import asyncio
-import logging
 import time
 from typing import Any, Dict, Optional
 
@@ -35,7 +35,6 @@ except ImportError:  # pragma: no cover - cdp is always present in this package
     CDPError = None
     has_cdp = False
 
-logger = logging.getLogger(__name__)
 
 
 async def get_args_from_cdp(

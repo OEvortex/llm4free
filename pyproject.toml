@@ -43,10 +43,7 @@ keywords = [
     "text-to-image", "tti", "weather", "youtube", "toolkit", "utilities",
     "web-search", "duckduckgo", "google", "yep"
 ]
-# NOTE: The CDP-backed providers (DeepInfraFree, Perchance, Cloudflare) and the
-# llm4free.requests.cdp module drive a real browser via the `agent-browser` CLI
-# (https://github.com/xtekky/agent-browser). It is NOT a PyPI dependency; install
-# it once with:  npm i -g agent-browser && agent-browser install
+
 dependencies = [
     "typing_extensions>=4.0.0",
     "curl_cffi",
@@ -93,20 +90,16 @@ api = [
     "starlette>=0.50.0",
     "pydantic",
     "python-multipart",
-    "tiktoken>=0.7.0",
     "jinja2",
     "websockets>=11.0",
     "regex",
 ]
 models = [
-    "tiktoken>=0.7.0",
     "tokenizers>=0.23.1",
     "safetensors>=0.8.0",
     "huggingface-hub>=1.20.1",
 ]
-parser = [
-    "lxml>=5.2.2",
-]
+
 docs = [
     "mkdocs>=1.6.1",
     "mkdocs-material>=9.7.6",
@@ -114,7 +107,7 @@ docs = [
     "mkdocstrings-python>=2.0.5",
 ]
 all = [
-    "llm4free[api,models,parser,docs,dev]",
+    "llm4free[api,models,docs,dev]",
 ]
 
 [tool.pytest.ini_options]

@@ -1,7 +1,7 @@
+from litprinter import ic
 import asyncio
 import functools
 import inspect
-import logging
 import time
 
 # --- Utility Decorators ---
@@ -10,7 +10,6 @@ from typing import Callable, Optional
 from .prompt_manager import AwesomePrompts  # noqa: E402,F401
 from .sanitize import *  # noqa: E402, F401, F403
 
-logger = logging.getLogger(__name__)
 
 
 def timeIt(func: Callable):
@@ -24,7 +23,7 @@ def timeIt(func: Callable):
     def _log_elapsed(func_name: str, elapsed: float) -> None:
         msg = f"\n{GREEN_BOLD}- Execution time for '{func_name}' : {elapsed:.6f} Seconds.  {RESET}\n"
         try:
-            logger.info(msg)
+            ic(msg)
         except Exception:
             pass
         try:
@@ -85,7 +84,7 @@ def retry(retries: int = 3, delay: float = 1) -> Callable:
                     return func(*args, **kwargs)
                 except Exception as exc:
                     last_exc = exc
-                    logger.warning(
+                    ic(
                         "Attempt %d failed: %s. Retrying in %s seconds...", attempt + 1, exc, delay
                     )
                     time.sleep(delay)
@@ -104,7 +103,7 @@ def retry(retries: int = 3, delay: float = 1) -> Callable:
                     return await func(*args, **kwargs)
                 except Exception as exc:
                     last_exc = exc
-                    logger.warning(
+                    ic(
                         "Attempt %d failed: %s. Retrying in %s seconds...", attempt + 1, exc, delay
                     )
                     await asyncio.sleep(delay)

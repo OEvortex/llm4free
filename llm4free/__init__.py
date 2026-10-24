@@ -1,6 +1,6 @@
+from litprinter import ic
 # llm4free/__init__.py
 
-import logging
 
 from llm4free.litagent import LitAgent
 
@@ -23,12 +23,11 @@ from .zeroart import *
 
 useragent = LitAgent()
 
-logger = logging.getLogger(__name__)
 
 # Check for updates on import to notify users of new versions
 try:
     update_message = check_for_updates(force=True)
     if update_message:
-        logger.info(update_message)
+        ic(update_message)
 except Exception:
     pass

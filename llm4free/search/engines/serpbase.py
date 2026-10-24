@@ -9,15 +9,14 @@ Documentation: https://serpbase.dev
 """
 
 from __future__ import annotations
+from litprinter import ic
 
-import logging
 import os
 from typing import Any
 
 from ..base import BaseSearchEngine
 from ..results import TextResult
 
-logger = logging.getLogger(__name__)
 
 API_URL = "https://api.serpbase.dev/google/search"
 
@@ -98,7 +97,7 @@ class SerpBase(BaseSearchEngine[TextResult]):
             resp.raise_for_status()
             data: dict[str, Any] = resp.json()
         except Exception:
-            logger.exception("SerpBase API request failed for query=%r", query)
+            ic("SerpBase API request failed for query=%r", query)
             return []
 
         results: list[TextResult] = []

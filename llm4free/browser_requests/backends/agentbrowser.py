@@ -7,11 +7,11 @@ overhead (~100-300 ms). Use the native CDP backend when latency matters.
 """
 
 from __future__ import annotations
+from litprinter import ic
 
 import asyncio
 import base64
 import json
-import logging
 import os
 import random
 import shutil
@@ -20,7 +20,6 @@ from typing import Any, Dict, List, Optional
 
 from .base import BaseBackend
 
-logger = logging.getLogger(__name__)
 
 
 def find_agent_browser() -> str:
@@ -52,7 +51,7 @@ def stealth_plugin_env() -> Dict[str, str]:
         if not os.access(plugin_path, os.X_OK):
             os.chmod(plugin_path, 0o755)
     except OSError as e:
-        logger.debug(f"stealth plugin chmod failed: {e}")
+        ic(f"stealth plugin chmod failed: {e}")
     registry = json.dumps(
         [
             {
@@ -155,7 +154,7 @@ class _CLI:
             cls.run(session_id, "connect", str(port), headless=headless,
                     timeout=60, user_data_dir=user_data_dir)
         except RuntimeError:
-            logger.debug("agent-browser connect: already connected (ignored)")
+            ic("agent-browser connect: already connected (ignored)")
 
 
 class AgentBrowserBackend(BaseBackend):
@@ -272,7 +271,7 @@ class AgentBrowserBackend(BaseBackend):
                 self._cli_run, "wait", "--load", "networkidle", timeout=60
             )
         except RuntimeError as e:
-            logger.warning(f"navigate wait failed for {url}: {e}")
+            ic(f"navigate wait failed for {url}: {e}")
 
     async def evaluate_js(self, expression: str) -> Any:
         payload = await asyncio.to_thread(
@@ -383,7 +382,7 @@ class AgentBrowserBackend(BaseBackend):
         return {}
 
     def add_event_handler(self, method: str, destination: Any) -> None:
-        logger.warning(
+        ic(
             "add_event_handler is a no-op on the agent-browser backend; "
             "use poll_console() or the native backend for live events."
         )
@@ -396,7 +395,7 @@ class AgentBrowserBackend(BaseBackend):
         try:
             await asyncio.to_thread(self._cli_run, "close", timeout=30)
         except RuntimeError as e:
-            logger.warning(f"agent-browser close failed: {e}")
+            ic(f"agent-browser close failed: {e}")
         self._started = False
         self._connected = False
 

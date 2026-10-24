@@ -1,11 +1,10 @@
+from litprinter import ic
 import importlib
-import logging
 import pkgutil
 from typing import Any, Dict, List, Mapping, Optional, Union, cast
 
 from llm4free.AIbase import Provider, TTSProvider
 
-logger = logging.getLogger(__name__)
 
 # Import TTI base class
 BaseImages = None

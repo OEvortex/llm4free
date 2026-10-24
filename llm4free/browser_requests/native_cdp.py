@@ -13,17 +13,16 @@ in-flight futures by id. Both directions are JSON only.
 """
 
 from __future__ import annotations
+from litprinter import ic
 
 import asyncio
 import itertools
 import json
-import logging
 import time
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Union
 
 from .native_ws import WsConnection, WebSocketError
 
-logger = logging.getLogger(__name__)
 
 EventDestination = Union[
     "asyncio.Queue[Dict[str, Any]]",
@@ -136,7 +135,7 @@ class CDPClient:
             raise last_error  # type: ignore[misc]
         self._closing = False
         self._listener = asyncio.ensure_future(self._receive_loop())
-        logger.debug("CDPClient connected to %s:%s", self.host, self.port)
+        ic("CDPClient connected to %s:%s", self.host, self.port)
 
     async def close(self) -> None:
         """Detach the listener and close the socket."""
@@ -154,7 +153,7 @@ class CDPClient:
             if not fut.done():
                 fut.set_exception(WebSocketError("CDP connection closed"))
         self._pending.clear()
-        logger.debug("CDPClient disconnected (%s:%s)", self.host, self.port)
+        ic("CDPClient disconnected (%s:%s)", self.host, self.port)
 
     # ------------------------------------------------------------------ #
     # Commands
@@ -264,7 +263,7 @@ class CDPClient:
             raise
         except Exception as e:  # connection failure floods pending futures
             if not self._closing:
-                logger.debug("CDP reader loop ended: %s", e)
+                ic("CDP reader loop ended: %s", e)
             for fut in list(self._pending.values()):
                 if not fut.done():
                     fut.set_exception(WebSocketError(f"connection lost: {e}"))
@@ -287,7 +286,7 @@ class CDPClient:
                     if asyncio.iscoroutine(result):
                         asyncio.get_event_loop().create_task(result)
             except Exception as e:  # noqa: BLE001 - one bad handler must not kill the loop
-                logger.debug("CDP event handler error for %s: %s", obj["method"], e)
+                ic("CDP event handler error for %s: %s", obj["method"], e)
 
 
 __all__ = ["CDPClient", "CDPError", "WebSocketError"]

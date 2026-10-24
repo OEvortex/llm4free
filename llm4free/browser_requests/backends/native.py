@@ -12,9 +12,9 @@ N sessions share ONE browser process via the refcounted pool (low RAM).
 """
 
 from __future__ import annotations
+from litprinter import ic
 
 import asyncio
-import logging
 import random
 from typing import Any, List, Optional
 
@@ -23,7 +23,6 @@ from ..native_cdp import CDPClient, CDPError
 from ..stealth import STEALTH_INIT_JS
 from .base import BaseBackend
 
-logger = logging.getLogger(__name__)
 
 
 class NativeCDPBackend(BaseBackend):
@@ -124,11 +123,11 @@ class NativeCDPBackend(BaseBackend):
             try:
                 await client.call(enable, session_id=sid)
             except CDPError as e:
-                logger.debug(f"{enable} unsupported by {self.engine_name}: {e}")
+                ic(f"{enable} unsupported by {self.engine_name}: {e}")
         try:
             await client.call("Network.enable", session_id=sid)
         except CDPError:
-            logger.debug("Network.enable unavailable; request logging disabled")
+            ic("Network.enable unavailable; request logging disabled")
         try:
             await client.call(
                 "Page.addScriptToEvaluateOnNewDocument",
@@ -136,7 +135,7 @@ class NativeCDPBackend(BaseBackend):
                 session_id=sid,
             )
         except CDPError:
-            logger.debug(f"stealth init script rejected by {self.engine_name}")
+            ic(f"stealth init script rejected by {self.engine_name}")
 
         # Mask the engine's own identity (e.g. lightpanda's ``Lightpanda/1.0``
         # HTTP header + sec-ch-ua) with a genuine Chrome UA.
@@ -260,7 +259,7 @@ class NativeCDPBackend(BaseBackend):
         payload = result or {}
         if payload.get("exceptionDetails"):
             detail = payload["exceptionDetails"].get("text", "evaluate failed")
-            logger.debug("evaluate_js error: %s", detail)
+            ic("evaluate_js error: %s", detail)
             return None
         return (payload.get("result") or {}).get("value")
 
@@ -270,7 +269,7 @@ class NativeCDPBackend(BaseBackend):
         try:
             return await self._eval_raw(expression)
         except (CDPError, asyncio.TimeoutError) as e:
-            logger.debug(f"evaluate_js failed: {e}")
+            ic(f"evaluate_js failed: {e}")
             return None
 
     async def evaluate_js_stdin(self, expression: str) -> Any:

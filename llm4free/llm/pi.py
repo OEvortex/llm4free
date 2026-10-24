@@ -79,7 +79,6 @@ import asyncio
 import base64
 import concurrent.futures
 import json
-import logging
 import queue
 import threading
 import time
@@ -115,7 +114,6 @@ from llm4free.llm.utils import (
     format_prompt,
 )
 
-logger = logging.getLogger(__name__)
 
 __all__ = ["PiAI"]
 
@@ -280,7 +278,7 @@ def _decode_text_b64(value: str) -> str:
     try:
         return base64.b64decode(value).decode("utf-8", errors="replace")
     except Exception as e:  # pragma: no cover - defensive
-        logger.debug("PiAI: failed to decode base64 payload: %s", e)
+        ic("PiAI: failed to decode base64 payload: %s", e)
         return value
 
 
@@ -342,7 +340,7 @@ class _WorkerThread(threading.Thread):
             try:
                 loop.run_until_complete(session.close())
             except BaseException as e:
-                logger.debug("PiAI: browser session close failed: %s", e)
+                ic("PiAI: browser session close failed: %s", e)
             finally:
                 loop.close()
 
@@ -448,7 +446,7 @@ class _BrowserBackend:
         try:
             await self.session.navigate(_PI_TALK_URL)
         except RuntimeError as e:
-            logger.warning("PiAI: navigate failed for %s: %s", _PI_TALK_URL, e)
+            ic("PiAI: navigate failed for %s: %s", _PI_TALK_URL, e)
 
         # Wait out the Cloudflare interstitial ("Just a moment...").
         # With the stealth plugin active the challenge resolves by itself
@@ -487,7 +485,7 @@ class _BrowserBackend:
             await self.session.evaluate_js(_CONSOLE_SETUP_JS)
             await self.session.evaluate_js(_CONSOLE_CLEAR_JS)
         except RuntimeError as e:
-            logger.warning("PiAI: console capture setup failed: %s", e)
+            ic("PiAI: console capture setup failed: %s", e)
         # Cursor snapshot happens right after the clear: any console line
         # produced from here on belongs to the caller's marker dispatch,
         # even when the in-page fetch completes within milliseconds.
@@ -511,7 +509,7 @@ class _BrowserBackend:
         try:
             chunk = await self.session.evaluate_js(_console_lines_js(cursor))
         except RuntimeError as e:
-            logger.warning("PiAI: console read failed: %s", e)
+            ic("PiAI: console read failed: %s", e)
             return []
         if not isinstance(chunk, str) or not chunk:
             return []
@@ -531,7 +529,7 @@ class _BrowserBackend:
         try:
             await self.session.evaluate_js(js)
         except RuntimeError as e:
-            logger.debug("PiAI: start dispatch returned: %s", e)
+            ic("PiAI: start dispatch returned: %s", e)
 
         deadline = time.time() + timeout
         raw = ""
@@ -587,7 +585,7 @@ class _BrowserBackend:
         try:
             await self.session.evaluate_js(js)
         except RuntimeError as e:
-            logger.debug("PiAI: stream dispatch returned: %s", e)
+            ic("PiAI: stream dispatch returned: %s", e)
 
         deadline = time.time() + timeout
         while time.time() < deadline:
@@ -632,7 +630,7 @@ class _BrowserBackend:
         try:
             await self.session.evaluate_js(js)
         except RuntimeError as e:
-            logger.debug("PiAI: voice dispatch returned: %s", e)
+            ic("PiAI: voice dispatch returned: %s", e)
 
         deadline = time.time() + timeout
         pieces: Dict[int, str] = {}
@@ -1050,7 +1048,7 @@ class PiAI(OpenAICompatibleProvider):
                 with open(output_file, "wb") as file:
                     file.write(audio)
         except Exception as e:
-            logger.warning("PiAI: voice download failed: %s", e)
+            ic("PiAI: voice download failed: %s", e)
 
     # ── lifecycle ─────────────────────────────────────────────────
 

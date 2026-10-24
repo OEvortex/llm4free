@@ -26,9 +26,9 @@ across concurrent sessions to keep RAM flat.
 """
 
 from __future__ import annotations
+from litprinter import ic
 
 import asyncio
-import logging
 import threading
 import uuid
 from typing import Any, Dict, List, Optional
@@ -54,7 +54,6 @@ from .browserproc import (
 from .native_cdp import CDPClient, CDPError
 from .stealth import CHROME_UA_FORMAT, STEALTH_INIT_JS, masked_chrome_user_agent
 
-logger = logging.getLogger(__name__)
 
 
 class CDPSession:

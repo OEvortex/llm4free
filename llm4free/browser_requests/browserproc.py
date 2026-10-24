@@ -18,11 +18,11 @@ HeadlessChrome UA plus ``--disable-blink-features=AutomationControlled``).
 """
 
 from __future__ import annotations
+from litprinter import ic
 
 import asyncio
 import atexit
 import dataclasses
-import logging
 import os
 import re
 import shutil
@@ -34,7 +34,6 @@ import urllib.error
 import urllib.request
 from typing import Dict, Optional, Tuple
 
-logger = logging.getLogger(__name__)
 
 
 # --------------------------------------------------------------------------- #
@@ -409,7 +408,7 @@ def _stop_lease(lease: _Lease) -> None:
                 except Exception:
                     pass
     except Exception as e:
-        logger.debug("browser shutdown failed: %s", e)
+        ic("browser shutdown failed: %s", e)
     if lease.profile:
         shutil.rmtree(lease.profile, ignore_errors=True)
 
