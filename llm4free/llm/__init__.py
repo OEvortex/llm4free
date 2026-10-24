@@ -46,7 +46,6 @@ from llm4free.llm.netwrck import Netwrck
 from llm4free.llm.ollama_swarm import OllamaSwarm
 from llm4free.llm.pi import PiAI
 from llm4free.llm.toolbaz import Toolbaz
-from llm4free.llm.turboseek import TurboSeek
 from llm4free.llm.typliai import TypliAI
 from llm4free.llm.utils import (
     ChatCompletion,
@@ -101,7 +100,6 @@ __all__ = [
     "DeepAI",
 
 
-    "TurboSeek",
     "PiAI",
     "TogetherAI",
     "TwoAI",

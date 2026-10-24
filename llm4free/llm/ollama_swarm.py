@@ -509,7 +509,7 @@ class OllamaSwarm(OpenAICompatibleProvider):
 
 if __name__ == "__main__":
     client = OllamaSwarm()
-    for _m in ['beam:cloud', 'deepseek-v4-flash:cloud', 'deepseek-v4-pro:cloud', 'deepseek-v4.1-flash:cloud', 'glm-4.7:cloud', 'glm-5.1:cloud', 'glm-5.2:cloud', 'glm-5.3-flash:cloud', 'glm-5.3:cloud', 'kimi-k2.5:cloud', 'kimi-k2.6:cloud', 'kimi-k2.7-code:cloud', 'kimi-k3:cloud', 'minimax-m2.5:cloud', 'minimax-m2.7:cloud', 'minimax-m3.1-flash:cloud', 'minimax-m3:cloud', 'mistral-large-4:cloud', 'muse-spark-open:cloud', 'nemotron-3-super:cloud', 'nemotron-3-ultra:cloud', 'qwen3-coder-next:cloud', 'qwen3.5:cloud']:
+    for _m in ["beam:cloud", "tinyllama:latest", "qwen2.5:0.5b"]:
         try:
             response = client.chat.completions.create(
                 model=_m,
@@ -517,6 +517,6 @@ if __name__ == "__main__":
             )
             if isinstance(response, ChatCompletion):
                 message = response.choices[0].message
-                print(_m, "->", (message.content if message else "")[:80])
+                print(_m, "->", (message.content if message and message.content else "")[:80])
         except Exception as e:
             print(_m, "ERR", e)
