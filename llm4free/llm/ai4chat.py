@@ -1,5 +1,5 @@
+import json
 import time
-import urllib.parse
 import uuid
 from typing import Any, Dict, Generator, List, Optional, Union, cast
 
@@ -338,15 +338,34 @@ MODELS = {
 # --- AI4Chat Client ---
 
 
+# Bodies the legacy gateway returns with HTTP 200 when it rejects a request. These are
+# error markers, never assistant content, so they must be raised rather than returned.
+LEGACY_ERROR_BODIES = frozenset(
+    {
+        "invalid request",
+        "invalid request.",
+        "bad request",
+        "unauthorized",
+        "forbidden",
+        "missing authentication token",
+        "access denied",
+        "not found",
+        "internal server error",
+    }
+)
+
+
 class Completions(BaseCompletions):
     def __init__(self, client: "AI4Chat"):
         self._client = client
+
+    # ------------------------------------------------------------------ public
 
     def create(
         self,
         *,
         model: str,
-        messages: List[Dict[str, str]],
+        messages: List[Dict[str, Any]],
         max_tokens: Optional[int] = None,
         stream: bool = False,
         temperature: Optional[float] = None,
@@ -358,227 +377,579 @@ class Completions(BaseCompletions):
         """
         Creates a model response for the given chat conversation.
         Mimics openai.chat.completions.create
+
+        Requests go to AI4Chat's official OpenAI-compatible endpoint, which needs an
+        API key (``AI4Chat(api_key=...)``). When no key is configured the legacy
+        unauthenticated gateway is attempted instead and raises if it is unavailable.
         """
-        # Use the format_prompt utility to format the conversation
-        from llm4free.llm.utils import format_prompt
+        model_name = self._client.resolve_model_name(model)
+        payload_messages = self._client.prepare_messages(messages)
 
-        # Format the messages into a single string
-        conversation_prompt = format_prompt(messages, add_special_tokens=True, include_system=True)
-
-        # Set up request parameters
-        country_param = kwargs.get("country", self._client.country)
-        user_id_param = kwargs.get("user_id", self._client.user_id)
-
-        # Generate request ID and timestamp
         request_id = f"chatcmpl-{uuid.uuid4()}"
         created_time = int(time.time())
 
-        # AI4Chat doesn't support streaming, so we'll simulate it if requested
         if stream:
             return self._create_stream(
                 request_id,
                 created_time,
                 model,
-                conversation_prompt,
-                country_param,
-                user_id_param,
+                model_name,
+                payload_messages,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                top_p=top_p,
                 timeout=timeout,
                 proxies=proxies,
+                **kwargs,
             )
-        else:
-            return self._create_non_stream(
-                request_id,
-                created_time,
-                model,
-                conversation_prompt,
-                country_param,
-                user_id_param,
-                timeout=timeout,
-                proxies=proxies,
-            )
+        return self._create_non_stream(
+            request_id,
+            created_time,
+            model,
+            model_name,
+            payload_messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            top_p=top_p,
+            timeout=timeout,
+            proxies=proxies,
+            **kwargs,
+        )
 
-    def _create_stream(
+    # ----------------------------------------------------------------- helpers
+
+    @staticmethod
+    def _build_payload(
+        model_name: str,
+        messages: List[Dict[str, Any]],
+        stream: bool,
+        max_tokens: Optional[int],
+        temperature: Optional[float],
+        top_p: Optional[float],
+        kwargs: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Build the JSON body for AI4Chat's OpenAI-compatible endpoint."""
+        payload: Dict[str, Any] = {
+            "model": model_name,
+            "messages": messages,
+            "stream": stream,
+        }
+        if max_tokens is not None:
+            payload["max_tokens"] = max_tokens
+        if temperature is not None:
+            payload["temperature"] = temperature
+        if top_p is not None:
+            payload["top_p"] = top_p
+
+        # AI4Chat-specific optional parameters documented on their /api pages.
+        for key in ("language", "tone", "wordcount", "googleSearchStatus", "top_k"):
+            if kwargs.get(key) is not None:
+                payload[key] = kwargs[key]
+        return payload
+
+    def _post_api(
         self,
-        request_id: str,
-        created_time: int,
-        model: str,
-        conversation_prompt: str,
-        country: str,
-        user_id: str,
-        timeout: Optional[int] = None,
-        proxies: Optional[dict] = None,
-    ) -> Generator[ChatCompletionChunk, None, None]:
-        """Simulate streaming by breaking up the full response into fixed-size character chunks."""
+        payload: Dict[str, Any],
+        stream: bool,
+        timeout: Optional[int],
+        proxies: Optional[dict],
+    ) -> Any:
+        """POST to the official endpoint, mapping transport/API errors to IOError."""
+        if not self._client.api_key:
+            raise IOError(
+                "AI4Chat requires an API key. Create a free key at "
+                "https://www.ai4chat.co/api and pass it as AI4Chat(api_key='...')."
+            )
+
+        original_proxies = dict(self._client.session.proxies)
+        if proxies is not None:
+            self._client.session.proxies.update(cast(Any, proxies))
+
         try:
-            # Get the full response first
-            full_response = self._get_ai4chat_response(
-                conversation_prompt, country, user_id, model=model, timeout=timeout, proxies=proxies
+            response = self._client.session.post(
+                self._client.api_endpoint,
+                data=json.dumps(payload),
+                headers=self._client.headers,
+                stream=stream,
+                timeout=timeout if timeout is not None else self._client.timeout,
+                impersonate="chrome",
             )
-
-            # Track token usage
-            count_tokens(conversation_prompt)
-            completion_tokens = 0
-
-            # Stream fixed-size character chunks (e.g., 48 chars)
-            buffer = full_response
-            chunk_size = 48
-            while buffer:
-                chunk_text = buffer[:chunk_size]
-                buffer = buffer[chunk_size:]
-                completion_tokens += count_tokens(chunk_text)
-
-                if chunk_text.strip():
-                    # Create the delta object
-                    delta = ChoiceDelta(content=chunk_text, role="assistant", tool_calls=None)
-
-                    # Create the choice object
-                    choice = Choice(index=0, delta=delta, finish_reason=None, logprobs=None)
-
-                    # Create the chunk object
-                    chunk = ChatCompletionChunk(
-                        id=request_id,
-                        choices=[choice],
-                        created=created_time,
-                        model=model,
-                        system_fingerprint=None,
-                    )
-
-                    yield chunk
-
-            # Final chunk with finish_reason="stop"
-            delta = ChoiceDelta(content=None, role=None, tool_calls=None)
-
-            choice = Choice(index=0, delta=delta, finish_reason="stop", logprobs=None)
-
-            chunk = ChatCompletionChunk(
-                id=request_id,
-                choices=[choice],
-                created=created_time,
-                model=model,
-                system_fingerprint=None,
-            )
-
-            yield chunk
-
         except RequestsError as e:
-            print(f"Error during AI4Chat stream request: {e}")
             raise IOError(f"AI4Chat request failed: {e}") from e
-        except Exception as e:
-            print(f"Unexpected error during AI4Chat stream request: {e}")
-            raise IOError(f"AI4Chat request failed: {e}") from e
+        finally:
+            if proxies is not None:
+                cast(Dict, self._client.session.proxies).clear()
+                self._client.session.proxies.update(cast(Any, original_proxies))
+
+        self._raise_for_api_error(response)
+        return response
+
+    @staticmethod
+    def _raise_for_api_error(response: Any) -> None:
+        """Turn a non-2xx AI4Chat response into an actionable exception."""
+        status = getattr(response, "status_code", 200)
+        if status is None or status < 400:
+            return
+
+        detail = ""
+        body_text = (getattr(response, "text", "") or "").strip()
+
+        # A streamed response body has not been consumed yet, and curl_cffi's streaming
+        # Response exposes neither read() nor a populated .text, so drain the iterator.
+        if not body_text:
+            iterator = getattr(response, "iter_content", None)
+            if callable(iterator):
+                parts = []
+                try:
+                    for part in iterator(chunk_size=None):
+                        if not part:
+                            continue
+                        parts.append(
+                            part.decode("utf-8", "replace")
+                            if isinstance(part, bytes)
+                            else str(part)
+                        )
+                except Exception:
+                    pass
+                body_text = "".join(parts).strip()
+
+        try:
+            body = json.loads(body_text) if body_text else None
+            if isinstance(body, dict):
+                raw = body.get("error") or body.get("message") or body.get("detail")
+                detail = str(raw) if raw else json.dumps(body)
+            elif body is not None:
+                detail = str(body)
+            else:
+                detail = body_text
+        except (json.JSONDecodeError, TypeError):
+            detail = body_text
+
+        if status in (401, 403):
+            hint = (
+                "AI4Chat rejected the API key. Create a free key at "
+                "https://www.ai4chat.co/api and pass it as AI4Chat(api_key='...')."
+            )
+        elif status == 404:
+            hint = f"Unknown AI4Chat endpoint: {getattr(response, 'url', '')}"
+        elif status == 429:
+            hint = "AI4Chat rate limit or exhausted free credits. Retry later."
+        elif status >= 500:
+            hint = "AI4Chat upstream error. Retry later."
+        else:
+            hint = "Check the request parameters."
+
+        raise IOError(f"AI4Chat request failed (HTTP {status}): {detail or 'no detail'}. {hint}")
+
+    # ------------------------------------------------------------ non-streaming
 
     def _create_non_stream(
         self,
         request_id: str,
         created_time: int,
         model: str,
-        conversation_prompt: str,
-        country: str,
-        user_id: str,
+        model_name: str,
+        messages: List[Dict[str, Any]],
+        max_tokens: Optional[int] = None,
+        temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
         timeout: Optional[int] = None,
         proxies: Optional[dict] = None,
+        **kwargs: Any,
     ) -> ChatCompletion:
-        """Get a complete response from AI4Chat."""
+        """Get a complete, non-streamed response from AI4Chat."""
+        if not self._client.api_key:
+            return self._create_legacy_non_stream(
+                request_id,
+                created_time,
+                model,
+                model_name,
+                messages,
+                timeout=timeout,
+                proxies=proxies,
+                **kwargs,
+            )
+
         try:
-            # Get the full response
-            full_response = self._get_ai4chat_response(
-                conversation_prompt, country, user_id, model=model, timeout=timeout, proxies=proxies
+            payload = self._build_payload(
+                model_name, messages, False, max_tokens, temperature, top_p, kwargs
             )
+            response = self._post_api(payload, stream=False, timeout=timeout, proxies=proxies)
 
-            # Estimate token counts
-            prompt_tokens = count_tokens(conversation_prompt)
-            completion_tokens = count_tokens(full_response)
-            total_tokens = prompt_tokens + completion_tokens
+            try:
+                data = response.json()
+            except Exception as e:
+                raise IOError(
+                    "AI4Chat returned a non-JSON response: "
+                    f"{(getattr(response, 'text', '') or '')[:200]}"
+                ) from e
 
-            # Create the message object
-            message = ChatCompletionMessage(role="assistant", content=full_response)
+            if not isinstance(data, dict):
+                raise IOError(f"AI4Chat returned an unexpected payload: {str(data)[:200]}")
 
-            # Create the choice object
-            choice = Choice(index=0, message=message, finish_reason="stop")
+            # Some deployments still answer 200 with an error envelope.
+            if data.get("error") and not data.get("choices"):
+                raise IOError(f"AI4Chat request failed: {data['error']}")
 
-            # Create the usage object
-            usage = CompletionUsage(
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-                total_tokens=total_tokens,
-            )
+            choices = data.get("choices") or []
+            raw_choice = choices[0] if choices else {}
+            message = raw_choice.get("message") or {}
 
-            # Create the completion object
-            completion = ChatCompletion(
-                id=request_id,
-                choices=[choice],
-                created=created_time,
+            content = message.get("content")
+            if content is None:
+                content = message.get("reasoning_content") or ""
+            elif not isinstance(content, str):
+                content = str(content)
+
+            finish_reason = raw_choice.get("finish_reason") or "stop"
+
+            usage = data.get("usage") or {}
+            prompt_tokens = usage.get("prompt_tokens")
+            completion_tokens = usage.get("completion_tokens")
+            if not isinstance(prompt_tokens, int):
+                prompt_tokens = count_tokens(" ".join(str(m.get("content", "")) for m in messages))
+            if not isinstance(completion_tokens, int):
+                completion_tokens = count_tokens(content)
+
+            return ChatCompletion(
+                id=data.get("id") or request_id,
+                choices=[
+                    Choice(
+                        index=raw_choice.get("index", 0),
+                        message=ChatCompletionMessage(role="assistant", content=content),
+                        finish_reason=finish_reason,
+                    )
+                ],
+                created=data.get("created") or created_time,
                 model=model,
-                usage=usage,
+                usage=CompletionUsage(
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    total_tokens=prompt_tokens + completion_tokens,
+                ),
             )
-
-            return completion
-
         except RequestsError as e:
             print(f"Error during AI4Chat non-stream request: {e}")
             raise IOError(f"AI4Chat request failed: {e}") from e
+        except IOError:
+            raise
         except Exception as e:
             print(f"Unexpected error during AI4Chat non-stream request: {e}")
             raise IOError(f"AI4Chat request failed: {e}") from e
 
-    def _get_ai4chat_response(
+    # --------------------------------------------------------------- streaming
+
+    def _create_stream(
         self,
-        prompt: str,
+        request_id: str,
+        created_time: int,
+        model: str,
+        model_name: str,
+        messages: List[Dict[str, Any]],
+        max_tokens: Optional[int] = None,
+        temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
+        timeout: Optional[int] = None,
+        proxies: Optional[dict] = None,
+        **kwargs: Any,
+    ) -> Generator[ChatCompletionChunk, None, None]:
+        """Stream a response from AI4Chat as OpenAI-compatible chunks."""
+        if not self._client.api_key:
+            return self._create_legacy_stream(
+                request_id,
+                created_time,
+                model,
+                model_name,
+                messages,
+                timeout=timeout,
+                proxies=proxies,
+                **kwargs,
+            )
+
+        payload = self._build_payload(
+            model_name, messages, True, max_tokens, temperature, top_p, kwargs
+        )
+        response = self._post_api(payload, stream=True, timeout=timeout, proxies=proxies)
+        return self._iter_sse(response, request_id, created_time, model)
+
+    def _iter_sse(
+        self,
+        response: Any,
+        request_id: str,
+        created_time: int,
+        model: str,
+    ) -> Generator[ChatCompletionChunk, None, None]:
+        """Parse AI4Chat's SSE stream into ChatCompletionChunk objects."""
+        buffer = ""
+        done = False
+        try:
+            for raw in response.iter_content(chunk_size=None):
+                if not raw:
+                    continue
+                try:
+                    text = raw.decode("utf-8") if isinstance(raw, bytes) else str(raw)
+                except UnicodeDecodeError:
+                    continue
+
+                buffer += text
+
+                while "\n" in buffer:
+                    line, buffer = buffer.split("\n", 1)
+                    line = line.strip()
+                    if not line or not line.startswith("data:"):
+                        continue
+
+                    data = line[len("data:") :].strip()
+                    if data == "[DONE]":
+                        done = True
+                        break
+
+                    try:
+                        event = json.loads(data)
+                    except json.JSONDecodeError:
+                        continue
+
+                    if not isinstance(event, dict):
+                        continue
+                    if event.get("error"):
+                        raise IOError(f"AI4Chat stream error: {event['error']}")
+
+                    for choice in event.get("choices") or []:
+                        delta = choice.get("delta") or {}
+                        content = delta.get("content")
+                        if content is None:
+                            content = delta.get("reasoning_content")
+                        if not content:
+                            continue
+
+                        yield ChatCompletionChunk(
+                            id=event.get("id") or request_id,
+                            choices=[
+                                Choice(
+                                    index=choice.get("index", 0),
+                                    delta=ChoiceDelta(
+                                        content=str(content), role=delta.get("role") or "assistant"
+                                    ),
+                                    finish_reason=choice.get("finish_reason"),
+                                )
+                            ],
+                            created=event.get("created") or created_time,
+                            model=model,
+                        )
+
+                if done:
+                    break
+
+            yield ChatCompletionChunk(
+                id=request_id,
+                choices=[
+                    Choice(
+                        index=0,
+                        delta=ChoiceDelta(content=None, role=None),
+                        finish_reason="stop",
+                    )
+                ],
+                created=created_time,
+                model=model,
+            )
+        except RequestsError as e:
+            print(f"Error during AI4Chat stream request: {e}")
+            raise IOError(f"AI4Chat request failed: {e}") from e
+        except IOError:
+            raise
+        except Exception as e:
+            print(f"Unexpected error during AI4Chat stream request: {e}")
+            raise IOError(f"AI4Chat request failed: {e}") from e
+
+    # ----------------------------------------------------- legacy free gateway
+
+    def _create_legacy_non_stream(
+        self,
+        request_id: str,
+        created_time: int,
+        model: str,
+        model_name: str,
+        messages: List[Dict[str, Any]],
+        timeout: Optional[int] = None,
+        proxies: Optional[dict] = None,
+        **kwargs: Any,
+    ) -> ChatCompletion:
+        """Best-effort path via the legacy unauthenticated gateway (no API key)."""
+        try:
+            full_response = self._get_legacy_response(
+                messages,
+                country=str(kwargs.get("country", self._client.country)),
+                user_id=str(kwargs.get("user_id", self._client.user_id)),
+                model=model_name,
+                timeout=timeout,
+                proxies=proxies,
+            )
+
+            prompt_text = " ".join(str(m.get("content", "")) for m in messages)
+            prompt_tokens = count_tokens(prompt_text)
+            completion_tokens = count_tokens(full_response)
+
+            return ChatCompletion(
+                id=request_id,
+                choices=[
+                    Choice(
+                        index=0,
+                        message=ChatCompletionMessage(role="assistant", content=full_response),
+                        finish_reason="stop",
+                    )
+                ],
+                created=created_time,
+                model=model,
+                usage=CompletionUsage(
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    total_tokens=prompt_tokens + completion_tokens,
+                ),
+            )
+        except RequestsError as e:
+            print(f"Error during AI4Chat non-stream request: {e}")
+            raise IOError(f"AI4Chat request failed: {e}") from e
+        except IOError:
+            raise
+        except Exception as e:
+            print(f"Unexpected error during AI4Chat non-stream request: {e}")
+            raise IOError(f"AI4Chat request failed: {e}") from e
+
+    def _create_legacy_stream(
+        self,
+        request_id: str,
+        created_time: int,
+        model: str,
+        model_name: str,
+        messages: List[Dict[str, Any]],
+        timeout: Optional[int] = None,
+        proxies: Optional[dict] = None,
+        **kwargs: Any,
+    ) -> Generator[ChatCompletionChunk, None, None]:
+        """Simulate streaming by slicing the legacy gateway's single-shot reply."""
+        try:
+            full_response = self._get_legacy_response(
+                messages,
+                country=str(kwargs.get("country", self._client.country)),
+                user_id=str(kwargs.get("user_id", self._client.user_id)),
+                model=model_name,
+                timeout=timeout,
+                proxies=proxies,
+            )
+
+            buffer = full_response
+            chunk_size = 48
+            while buffer:
+                chunk_text = buffer[:chunk_size]
+                buffer = buffer[chunk_size:]
+                if not chunk_text.strip():
+                    continue
+
+                yield ChatCompletionChunk(
+                    id=request_id,
+                    choices=[
+                        Choice(
+                            index=0,
+                            delta=ChoiceDelta(content=chunk_text, role="assistant"),
+                            finish_reason=None,
+                        )
+                    ],
+                    created=created_time,
+                    model=model,
+                )
+
+            yield ChatCompletionChunk(
+                id=request_id,
+                choices=[
+                    Choice(
+                        index=0,
+                        delta=ChoiceDelta(content=None, role=None),
+                        finish_reason="stop",
+                    )
+                ],
+                created=created_time,
+                model=model,
+            )
+        except RequestsError as e:
+            print(f"Error during AI4Chat stream request: {e}")
+            raise IOError(f"AI4Chat request failed: {e}") from e
+        except IOError:
+            raise
+        except Exception as e:
+            print(f"Unexpected error during AI4Chat stream request: {e}")
+            raise IOError(f"AI4Chat request failed: {e}") from e
+
+    def _get_legacy_response(
+        self,
+        messages: List[Dict[str, Any]],
         country: str,
         user_id: str,
         model: Optional[str] = None,
         timeout: Optional[int] = None,
         proxies: Optional[dict] = None,
     ) -> str:
-        """Make the actual API request to AI4Chat."""
-        timeout_val = timeout if timeout is not None else self._client.timeout
+        """
+        Call the legacy unauthenticated AI4Chat gateway.
+
+        The gateway answers rejected requests with HTTP 200 and an error string in the
+        body, so ``raise_for_status()`` is not enough - the body is validated here and
+        such replies are raised instead of being returned as assistant content.
+        """
+        from llm4free.llm.utils import format_prompt
+
+        conversation_prompt = format_prompt(messages, add_special_tokens=True, include_system=True)
+
         original_proxies = dict(self._client.session.proxies)
         if proxies is not None:
             self._client.session.proxies.update(cast(Any, proxies))
 
-        # Get model name
-        model_key = model or self._client.model
-        if model_key not in MODELS:
-            raise ValueError(
-                f"Invalid model '{model_key}'. Available models: {list(MODELS.keys())[:10]}... (and {len(MODELS) - 10} more)"
-            )
-        model_name = MODELS[model_key]
-
         try:
-            # URL encode parameters
-            encoded_text = urllib.parse.quote(prompt)
-            encoded_country = urllib.parse.quote(country)
-            encoded_user_id = urllib.parse.quote(user_id)
-            encoded_model = urllib.parse.quote(model_name)
+            params: Dict[str, str] = {
+                "text": conversation_prompt,
+                "country": country,
+                "user_id": user_id,
+            }
+            if model:
+                params["model"] = model
 
-            # Construct the API URL with model parameter
-            url = f"{self._client.api_endpoint}?text={encoded_text}&country={encoded_country}&user_id={encoded_user_id}&model={encoded_model}"
-
-            # Make the request
             response = self._client.session.get(
-                url, headers=self._client.headers, timeout=timeout_val
+                self._client.legacy_endpoint,
+                params=params,
+                headers=self._client.headers,
+                timeout=timeout if timeout is not None else self._client.timeout,
+                impersonate="chrome",
             )
             response.raise_for_status()
         except RequestsError as e:
-            raise IOError(f"Failed to generate response: {e}")
+            raise IOError(f"AI4Chat request failed: {e}") from e
         finally:
             if proxies is not None:
                 cast(Dict, self._client.session.proxies).clear()
                 self._client.session.proxies.update(cast(Any, original_proxies))
 
-        # Process the response text
-        response_text = response.text
+        response_text = (getattr(response, "text", "") or "").strip()
 
-        # Remove surrounding quotes if present
-        if response_text.startswith('"'):
-            response_text = response_text[1:]
-        if response_text.endswith('"'):
-            response_text = response_text[:-1]
+        # The gateway returns a JSON string (quoted) for successful replies.
+        if response_text.startswith('"') and response_text.endswith('"') and len(response_text) > 1:
+            try:
+                decoded = json.loads(response_text)
+                if isinstance(decoded, str):
+                    response_text = decoded
+            except json.JSONDecodeError:
+                response_text = response_text[1:-1]
 
-        # Replace escaped newlines
-        response_text = response_text.replace("\\n", "\n").replace("\\n\\n", "\n\n")
+        normalized = response_text.strip().lower()
+        if normalized in LEGACY_ERROR_BODIES:
+            raise IOError(
+                f"AI4Chat's free gateway is unavailable (returned {normalized!r}). "
+                "Create a free API key at https://www.ai4chat.co/api and pass it as "
+                "AI4Chat(api_key='...')."
+            )
 
-        return response_text
+        if not response_text.strip():
+            raise IOError("AI4Chat returned an empty response.")
+
+        return response_text.replace("\\n", "\n")
 
 
 class Chat(BaseChat):
@@ -588,10 +959,13 @@ class Chat(BaseChat):
 
 class AI4Chat(OpenAICompatibleProvider):
     """
-    OpenAI-compatible client for AI4Chat API with support for multiple AI models.
+    OpenAI-compatible client for AI4Chat's API with support for 270+ AI models.
+
+    Requests are sent to AI4Chat's official OpenAI-compatible endpoint, which requires
+    a free API key from https://www.ai4chat.co/api
 
     Usage:
-        client = AI4Chat()
+        client = AI4Chat(api_key="your-key")
         response = client.chat.completions.create(
             model="gpt-5.2",
             messages=[{"role": "user", "content": "Hello!"}]
@@ -602,33 +976,43 @@ class AI4Chat(OpenAICompatibleProvider):
         print(client.models.list())
     """
 
-    required_auth = False
+    required_auth = True
     AVAILABLE_MODELS = list(MODELS.keys())
     default_model = "gpt-5.2"
 
     def __init__(
         self,
-        system_prompt: str = "You are a helpful and informative AI assistant.",
+        api_key: Optional[str] = None,
+        system_prompt: Optional[str] = None,
         country: str = "Asia",
-        user_id: str = "usersmjb2oaz7y",
+        user_id: Optional[str] = None,
         proxies: Optional[Dict[str, str]] = None,
         model: str = default_model,
+        timeout: int = 60,
     ):
         """
         Initialize the AI4Chat client.
 
         Args:
-            system_prompt: System prompt to guide the AI's behavior
-            country: Country parameter for API
-            user_id: User ID for API
+            api_key: AI4Chat API key from https://www.ai4chat.co/api. Optional, but
+                required for the official endpoint. Without it the legacy
+                unauthenticated gateway is attempted and raises if it is unavailable.
+            system_prompt: Prepended to the conversation when the caller sends no
+                system message. Left unset by default so messages are forwarded as-is.
+            country: Country parameter for the legacy gateway only
+            user_id: User ID for the legacy gateway only (random per instance by default)
             proxies: Proxy configuration
             model: Default model to use (default: "gpt-5.2")
+            timeout: Request timeout in seconds
         """
         super().__init__(proxies=proxies)
-        self.timeout = 30
+        self.timeout = timeout
         self.system_prompt = system_prompt
+        self.api_key = api_key
         self.country = country
-        self.user_id = user_id
+        # The legacy gateway tracked anonymous users by id; a stale hard-coded id was
+        # one reason it started rejecting requests, so default to a fresh one.
+        self.user_id = user_id or f"user{uuid.uuid4().hex[:10]}"
 
         # Validate and set default model
         if model not in MODELS:
@@ -638,26 +1022,27 @@ class AI4Chat(OpenAICompatibleProvider):
         self.model = model
         self.model_name = MODELS[model]
 
-        # API endpoint
-        self.api_endpoint = (
+        # Official OpenAI-compatible endpoint (POST, Bearer auth)
+        self.api_endpoint = "https://www.ai4chat.co/api/v1/chat/completions"
+        # Legacy unauthenticated gateway, kept as a no-API-key fallback
+        self.legacy_endpoint = (
             "https://yw85opafq6.execute-api.us-east-1.amazonaws.com/default/boss_mode_15aug"
         )
 
         # Set headers
         self.headers = {
             "Accept": "*/*",
-            "Accept-Language": "id-ID,id;q=0.9",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Content-Type": "application/json",
             "Origin": "https://www.ai4chat.co",
-            "Priority": "u=1, i",
             "Referer": "https://www.ai4chat.co/",
-            "Sec-CH-UA": '"Chromium";v="131", "Not_A Brand";v="24", "Microsoft Edge Simulate";v="131", "Lemur";v="131"',
-            "Sec-CH-UA-Mobile": "?1",
-            "Sec-CH-UA-Platform": '"Android"',
             "Sec-Fetch-Dest": "empty",
             "Sec-Fetch-Mode": "cors",
-            "Sec-Fetch-Site": "cross-site",
+            "Sec-Fetch-Site": "same-origin",
             "User-Agent": agent.random(),
         }
+        if self.api_key:
+            self.headers["Authorization"] = f"Bearer {self.api_key}"
 
         # Update session headers
         self.session.headers.update(self.headers)
@@ -665,12 +1050,60 @@ class AI4Chat(OpenAICompatibleProvider):
         # Initialize chat interface
         self.chat = Chat(self)
 
+    def resolve_model_name(self, model: Optional[str] = None) -> str:
+        """Map an llm4free model key to the display name AI4Chat's API expects."""
+        model_key = model or self.model
+        if model_key not in MODELS:
+            raise ValueError(
+                f"Invalid model '{model_key}'. Available models: {list(MODELS.keys())[:10]}... (and {len(MODELS) - 10} more)"
+            )
+        return MODELS[model_key]
+
+    def prepare_messages(self, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Normalize messages for the OpenAI-compatible endpoint.
+
+        Only role/content pairs are forwarded. A configured ``system_prompt`` is
+        prepended when the caller sent no system message; by default messages are
+        passed through unchanged.
+        """
+        normalized: List[Dict[str, Any]] = []
+        has_system = False
+
+        for message in messages or []:
+            role = str(message.get("role") or "user").strip().lower() or "user"
+            content = message.get("content")
+            if content is None:
+                content = ""
+            elif not isinstance(content, str):
+                content = str(content)
+            if not content.strip():
+                continue
+            if role == "system":
+                has_system = True
+            normalized.append({"role": role, "content": content})
+
+        if not normalized:
+            raise ValueError("No valid prompt could be generated from messages")
+
+        if not has_system and self.system_prompt:
+            normalized.insert(0, {"role": "system", "content": self.system_prompt})
+
+        return normalized
+
+    @classmethod
+    def get_models(cls, api_key: Optional[str] = None) -> List[str]:
+        """Get available model ids (AI4Chat exposes no public model listing endpoint)."""
+        return cls.AVAILABLE_MODELS
+
     @property
     def models(self) -> SimpleModelList:
         return SimpleModelList(type(self).AVAILABLE_MODELS)
 
 
 if __name__ == "__main__":
+    import os
+
     from rich import print
 
     # List available models
@@ -679,7 +1112,14 @@ if __name__ == "__main__":
         print(f"  - {model_key}: {model_name}")
     print(f"  ... and {len(MODELS) - 10} more models\n")
 
-    client = AI4Chat(model="gpt-5.2")
+    # Free API key from https://www.ai4chat.co/api
+    client = AI4Chat(api_key=os.environ.get("AI4CHAT_API_KEY"), model="gpt-5.2")
+
+    if not client.api_key:
+        print(
+            "[bold yellow]Set AI4CHAT_API_KEY (free key from "
+            "https://www.ai4chat.co/api) to run this demo.[/bold yellow]\n"
+        )
 
     print("[bold green]NON-STREAMING RESPONSE (GPT 5.2):[/bold green]")
     response = client.chat.completions.create(

@@ -90,10 +90,11 @@ from llm4free import ChatGPT, AI4Chat, HeckAI
 ai = ChatGPT(api_key="sk-...")
 response = ai.chat("Hello!")
 
-# Free providers (no API key needed)
-ai = AI4Chat()
+# AI4Chat (free API key from https://www.ai4chat.co/api)
+ai = AI4Chat(api_key="...")
 response = ai.chat("Hello!")
 
+# Free providers (no API key needed)
 ai = HeckAI()
 response = ai.chat("Hello!")
 ```

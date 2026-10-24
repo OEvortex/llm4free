@@ -6,6 +6,7 @@
 
 # Base classes and utilities
 from llm4free.llm.ai4chat import AI4Chat
+from llm4free.llm.chatjimmy import ChatJimmy
 from llm4free.llm.akashgpt import AkashGPT
 from llm4free.llm.artingai import ArtingAI
 from llm4free.llm.Auth import (
@@ -43,7 +44,6 @@ from llm4free.llm.exaai import ExaAI
 from llm4free.llm.freeai import FreeAI
 from llm4free.llm.freeaionline import FreeAIOnline
 from llm4free.llm.freeassist import FreeAssist
-from llm4free.llm.fuckicoding import FuckICoding
 from llm4free.llm.gemini import Gemini
 from llm4free.llm.glm import GLM
 from llm4free.llm.gptfree import GptFree
@@ -133,6 +133,7 @@ __all__ = [
     "GptFree",
     "HeckAI",
     "IBM",
+    "ChatJimmy",
     "K2Think",
     "LLMChat",
     "Netwrck",
@@ -148,7 +149,6 @@ __all__ = [
     "Zenmux",
     "Sambanova",
     "TypliAI",
-    "FuckICoding",
     "FreeAIOnline",
     "UncensoredChat",
     # New free providers (no browser required)

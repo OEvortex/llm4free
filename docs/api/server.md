@@ -34,7 +34,7 @@ python -m llm4free.server.server
 
 ```json
 {
-    "model": "AI4Chat/gpt-4o",
+    "model": "HeckAI/deepseek/deepseek-v4-flash",
     "messages": [
         {"role": "system", "content": "You are helpful."},
         {"role": "user", "content": "Hello!"}
@@ -63,7 +63,7 @@ python -m llm4free.server.server
 
 ```json
 {
-    "model": "AI4Chat/gpt-4o",
+    "model": "HeckAI/deepseek/deepseek-v4-flash",
     "max_tokens": 1024,
     "system": "You are helpful.",
     "messages": [
@@ -155,7 +155,7 @@ client = OpenAI(
 )
 
 response = client.chat.completions.create(
-    model="AI4Chat/gpt-4o",
+    model="HeckAI/deepseek/deepseek-v4-flash",
     messages=[{"role": "user", "content": "Hello!"}]
 )
 ```
@@ -171,7 +171,7 @@ client = anthropic.Anthropic(
 )
 
 message = client.messages.create(
-    model="AI4Chat/gpt-4o",
+    model="HeckAI/deepseek/deepseek-v4-flash",
     max_tokens=1024,
     messages=[{"role": "user", "content": "Hello!"}]
 )

@@ -50,7 +50,6 @@ provider = get_provider_instance(provider_class)
 
 | Provider | Models | Features |
 |----------|--------|----------|
-| AI4Chat | 270+ | Wide model selection |
 | ChatGPT | 15+ | GPT models |
 | HeckAI | 9+ | DeepSeek, Gemini |
 | LLMChat | 40+ | Cloudflare models |
@@ -118,8 +117,8 @@ response = client.chat.completions.create(
 ```python
 from llm4free import AI4Chat
 
-# Use specific provider
-ai = AI4Chat()
+# Use specific provider (free API key from https://www.ai4chat.co/api)
+ai = AI4Chat(api_key="...")
 response = ai.chat("Hello!")
 ```
 

@@ -1,3 +1,4 @@
+from llm4free.models import model
 import json
 import random
 import re
@@ -364,19 +365,30 @@ class Gemini(OpenAICompatibleProvider):
 
 
 if __name__ == "__main__":
-    print("-" * 80)
-    print(f"{'Model':<50} {'Status':<10} {'Response'}")
-    print("-" * 80)
+    # print("-" * 80)
+    # print(f"{'Model':<50} {'Status':<10} {'Response'}")
+    # print("-" * 80)
 
-    for model in Gemini.AVAILABLE_MODELS:
-        try:
-            client = Gemini(timeout=300)
-            response = client.chat.completions.create(
-                model=model,
-                messages=[{"role": "user", "content": "Say 'Hello' in one word"}],
-                stream=False,
-            )
-            content = response.choices[0].message.content or ""  # ty:ignore[unresolved-attribute]
-            print(f"{model:<50} {'OK':<10} {content[:30]}")
-        except Exception as e:
-            print(f"{model:<50} {'FAIL':<10} {type(e).__name__}: {e}")
+    # for model in Gemini.AVAILABLE_MODELS:
+    #     try:
+    #         client = Gemini(timeout=300)
+    #         response = client.chat.completions.create(
+    #             model=model,
+    #             messages=[{"role": "user", "content": "Say 'Hello' in one word"}],
+    #             stream=False,
+    #         )
+    #         content = response.choices[0].message.content or ""  # ty:ignore[unresolved-attribute]
+    #         print(f"{model:<50} {'OK':<10} {content[:30]}")
+    #     except Exception as e:
+    #         print(f"{model:<50} {'FAIL':<10} {type(e).__name__}: {e}")
+
+    client = Gemini(timeout=300)
+    response = client.chat.completions.create(
+        model="gemini-3.6-flash",
+        messages=[{"role": "user", "content": input("Enter your message: ")}],
+        stream=True,
+    )
+    for chunks in response:
+        for choice in chunks.choices:
+            if choice.delta.content:
+                print(choice.delta.content, end="", flush=True)

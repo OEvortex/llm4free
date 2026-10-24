@@ -164,8 +164,8 @@ LLM4Free supports **40+ AI providers** plus multiple search engines and media mo
 
 | Category | Examples |
 |----------|----------|
-| **Free (no auth)** | HeckAI, ArtingAI, FreeAI, AI4Chat, WiseCat, ExaAI, Netwrck, and 30+ more |
-| **Authenticated** | Groq, DeepInfra, IBM, OpenRouter, HuggingFace, Sambanova, TogetherAI |
+| **Free (no auth)** | HeckAI, ArtingAI, FreeAI, WiseCat, ExaAI, Netwrck, and 30+ more |
+| **Authenticated** | Groq, DeepInfra, IBM, OpenRouter, HuggingFace, Sambanova, TogetherAI, AI4Chat (free key at ai4chat.co/api) |
 | **Search** | DuckDuckGo, Bing, Brave, Yahoo, Mojeek, Wikipedia, SerpBase |
 | **Images (TTI)** | PollinationsAI, TogetherImage, StableHordeAI, Lexica, MagicStudioAI, PerchanceAI |
 | **Voice (TTS)** | ElevenLabs, OpenAI FM, Qwen, Murf, Parler, Kitten, Lux, Sherpa |
