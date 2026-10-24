@@ -38,7 +38,8 @@ class Scout:
 
         Args:
             markup (str): HTML content to parse
-            features (str): Parser to use ('html.parser', 'lxml', 'html5lib', 'lxml-xml')
+            features (str): Parser to use ('html.parser', 'lxml', 'html5lib', 'lxml-xml').
+                              'html5lib' requires the optional html5lib package.
             from_encoding (str): Source encoding (if known)
             exclude_encodings (list): Encodings to avoid
             element_classes (dict): Custom classes for different element types
@@ -57,11 +58,13 @@ class Scout:
         self.from_encoding = from_encoding
 
         # Get the right parser for the job
-        if features not in ParserRegistry.list_parsers():
+        known_parsers = {"html.parser", "lxml", "html5lib", "lxml-xml"}
+        if features not in known_parsers:
             raise ValueError(
-                f"Invalid parser '{features}'! Choose from: {', '.join(ParserRegistry.list_parsers().keys())}"
+                f"Invalid parser '{features}'! Choose from: {', '.join(sorted(known_parsers))}"
             )
 
+        # html5lib is optional; importing it may raise ImportError if not installed
         parser_class = ParserRegistry.get_parser(features)
         self.parser = parser_class
 

@@ -31,6 +31,8 @@ class ParserRegistry:
             importlib.import_module("html5lib")
             cls._PARSERS["html5lib"] = HTML5Parser
         except ImportError:
+            # html5lib is optional; leave it unregistered so callers get a
+            # clear error when they explicitly request it.
             pass
 
     @classmethod
@@ -50,6 +52,11 @@ class ParserRegistry:
         if parser_name == "html5lib":
             cls._ensure_html5lib()
         if parser_name not in cls._PARSERS:
+            if parser_name == "html5lib":
+                raise ImportError(
+                    "html5lib is required for the 'html5lib' parser but is not installed. "
+                    "Install it with: pip install html5lib"
+                )
             raise ValueError(
                 f"Parser '{parser_name}' not found. Available parsers: {list(cls._PARSERS.keys())}"
             )

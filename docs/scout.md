@@ -122,11 +122,12 @@ Scout supports multiple HTML/XML parsers, selectable via the `features` argument
 |--------|-------------|----------|
 | `html.parser` | Python's built-in parser | General-purpose parsing, no dependencies |
 | `lxml` | Fast C-based parser | Performance-critical applications |
-| `html5lib` | Highly compliant HTML5 parser | Handling malformed HTML |
+| `html5lib` | Highly compliant HTML5 parser (optional) | Handling malformed HTML |
 | `lxml-xml` | XML parser | XML document parsing |
 
 ```python
 scout = Scout(html_content, features='lxml')      # For speed
+# html5lib requires: pip install html5lib
 scout = Scout(html_content, features='html5lib')  # For compliance
 ```
 
