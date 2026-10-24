@@ -50,7 +50,7 @@ class Completions(BaseCompletions):
         timeout: Optional[int] = None,
         proxies: Optional[dict] = None,
         **kwargs: Any,
-    ) -> Union[ChatCompletion, Generator[ChatCompletionChunk, None, None]]:
+    ) -> Union[ChatCompletion, Generator[ChatCompletionChunk, None, None]]:  # ty:ignore
         """
         Create a chat completion with the Miklium API.
 
