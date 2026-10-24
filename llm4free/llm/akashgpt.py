@@ -67,7 +67,10 @@ class Completions(BaseCompletions):
                     try:
                         await session.start()
                         await session.navigate("https://chat.akash.network/")
-                        await asyncio.sleep(4)
+                        try:
+                            await session._run("wait", "--load", "networkidle", timeout=30)
+                        except Exception:
+                            pass
                         await session.install_console_capture()
                         payload = {
                             "id": uuid.uuid4().hex,
@@ -199,11 +202,17 @@ class AkashGPT(OpenAICompatibleProvider):
 
 if __name__ == "__main__":
     from rich import print
-    akash = AkashGPT()
-    messages = [
-        {"role": "system", "content": "You are a helpful assistant."},
-        {"role": "user", "content": "Hello, how are you?"},
-    ]
-    completion = akash.chat.completions.create(model="openai-gpt-oss-120b", messages=messages, stream=True)
-    for chunk in completion:
-        print(chunk, end="", flush=True)
+    from llm4free.AIutel import timeIt
+
+    @timeIt
+    def main():
+        akash = AkashGPT()
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Hello, how are you?"},
+        ]
+        completion = akash.chat.completions.create(model="openai-gpt-oss-120b", messages=messages, stream=True)
+        for chunk in completion:
+            print(chunk.choices[0].delta.content or "", end="", flush=True)
+
+    main()

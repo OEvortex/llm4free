@@ -135,4 +135,4 @@ if __name__ == "__main__":
         stream=True,
     )
     for chunk in result:
-        print(chunk, end="", flush=True)
+        print(chunk.choices[0].delta.content or "", end="", flush=True)

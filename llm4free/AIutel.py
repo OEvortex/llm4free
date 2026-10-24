@@ -21,30 +21,49 @@ def timeIt(func: Callable):
     RESET = "\033[0m"
 
     def _log_elapsed(func_name: str, elapsed: float) -> None:
-        logger.info(
-            "%s- Execution time for '%s' : %.6f Seconds.  %s", GREEN_BOLD, func_name, elapsed, RESET
-        )
+        msg = f"\n{GREEN_BOLD}- Execution time for '{func_name}' : {elapsed:.6f} Seconds.  {RESET}\n"
+        try:
+            logger.info(msg)
+        except Exception:
+            pass
+        try:
+            print(msg)
+        except Exception:
+            pass
 
     @functools.wraps(func)
     def sync_wrapper(*args, **kwargs):
         start_time = time.monotonic()
-        result = func(*args, **kwargs)
-        elapsed = time.monotonic() - start_time
-        _log_elapsed(getattr(func, "__name__", str(func)), elapsed)
-        return result
+        try:
+            result = func(*args, **kwargs)
+            return result
+        finally:
+            elapsed = time.monotonic() - start_time
+            _log_elapsed(getattr(func, "__name__", getattr(func, "__qualname__", str(func))), elapsed)
 
     @functools.wraps(func)
     async def async_wrapper(*args, **kwargs):
         start_time = time.monotonic()
-        result = await func(*args, **kwargs)
-        elapsed = time.monotonic() - start_time
-        _log_elapsed(getattr(func, "__name__", str(func)), elapsed)
-        return result
+        try:
+            result = await func(*args, **kwargs)
+            return result
+        finally:
+            elapsed = time.monotonic() - start_time
+            _log_elapsed(getattr(func, "__name__", getattr(func, "__qualname__", str(func))), elapsed)
 
-    if asyncio.iscoroutinefunction(func):
-        return async_wrapper
-    else:
-        return sync_wrapper
+    try:
+        if asyncio.iscoroutinefunction(func):
+            return async_wrapper
+    except Exception:
+        pass
+    try:
+        import inspect
+
+        if inspect.iscoroutinefunction(func):
+            return async_wrapper
+    except Exception:
+        pass
+    return sync_wrapper
 
 
 def retry(retries: int = 3, delay: float = 1) -> Callable:
