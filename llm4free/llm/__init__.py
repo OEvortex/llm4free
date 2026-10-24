@@ -37,7 +37,6 @@ from llm4free.llm.base import (
 from llm4free.llm.chatgpt import ChatGPT, ChatGPTReversed
 
 # Provider implementations
-from llm4free.llm.essentialai import EssentialAI
 from llm4free.llm.exaai import ExaAI
 from llm4free.llm.freeai import FreeAI
 from llm4free.llm.freeaionline import FreeAIOnline
@@ -110,8 +109,8 @@ __all__ = [
     "count_tokens",
 
     "DeepAI",
-    "EssentialAI",
-    "FreeAI",
+
+
     "TurboSeek",
     "PiAI",
     "Supercode",
@@ -124,7 +123,10 @@ __all__ = [
     "ChatGPTReversed",
     "DeepInfra",
 
+
     "ExaAI",
+    "FreeAI",
+    "FreeAIOnline",
     "FreeAssist",
     "Gemini",
     "GLM",
@@ -147,7 +149,7 @@ __all__ = [
     "Zenmux",
     "Sambanova",
     "TypliAI",
-    "FreeAIOnline",
+
     "UncensoredChat",
     # New free providers (no browser required)
     "Miklium",

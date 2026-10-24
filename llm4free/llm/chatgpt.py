@@ -70,6 +70,26 @@ _CONSOLE_POLL_JS = (
 )
 
 
+class _ChatGPTSession(CDPSession):
+    """CDP session that launches the browser with a realistic Chrome UA.
+
+    Cloudflare rejects the default ``HeadlessChrome`` user agent, but
+    :class:`~llm4free.browser_requests.cdp.CDPSession` exposes no public
+    override, so the ``--user-agent`` global flag is added to the commands
+    that launch or navigate the browser.
+    """
+
+    _LAUNCH_COMMANDS = frozenset({"open", "navigate", "goto"})
+
+    async def _run(
+        self, *args: str, timeout: int = 120, input_text: Optional[str] = None
+    ) -> str:
+        """Run an agent-browser command, forcing the Chrome UA when launching."""
+        if args and args[0] in self._LAUNCH_COMMANDS:
+            args = (*args, "--user-agent", CHATGPT_USER_AGENT)
+        return await super()._run(*args, timeout=timeout, input_text=input_text)
+
+
 class ChatGPTReversed:
     """Lightweight facade over the anonymous ChatGPT browser flow.
 
@@ -79,28 +99,7 @@ class ChatGPTReversed:
     """
 
     AVAILABLE_MODELS = [
-        "auto",
-        "gpt-5-1",
-        "gpt-5-1-instant",
-        "gpt-5-1-thinking",
-        "gpt-5",
-        "gpt-5-instant",
-        "gpt-5-thinking",
-        "gpt-4",
-        "gpt-4.1",
-        "gpt-4-1",
-        "gpt-4.1-mini",
-        "gpt-4-1-mini",
-        "gpt-4.5",
-        "gpt-4-5",
-        "gpt-4o",
-        "gpt-4o-mini",
-        "o1",
-        "o1-mini",
-        "o3-mini",
-        "o3-mini-high",
-        "o4-mini",
-        "o4-mini-high",
+        "GPT-6-free",
     ]
 
     def __init__(self, model: str = "auto", timeout: int = DEFAULT_TIMEOUT) -> None:
@@ -158,13 +157,31 @@ def _conversation_script(prompt: str) -> str:
   try {
     const prompt = __PROMPT__;
 
-    // Wait for the page's Sentinel SDK (it is injected after hydration).
-    let waited = 0;
-    while (typeof window.SentinelSDK === 'undefined' && waited < 60000) {
-      await sleep(500);
-      waited += 500;
-    }
-    if (typeof window.SentinelSDK === 'undefined') {
+    // The page does not always expose the Sentinel SDK as a global; it is
+    // normally loaded on demand when the composer prepares a request. Load
+    // it explicitly so the flow does not depend on the landing page markup.
+    const loadSentinel = async () => {
+      if (typeof window.SentinelSDK !== 'undefined') return true;
+      // The versionless loader stays current; the versioned asset is a
+      // fallback in case the loader is unavailable.
+      const sources = [
+        '/backend-api/sentinel/sdk.js',
+        '/sentinel/20260810913b/sdk.js',
+      ];
+      for (const src of sources) {
+        await new Promise((resolve) => {
+          const el = document.createElement('script');
+          el.src = src;
+          el.onload = resolve;
+          el.onerror = resolve;
+          document.head.appendChild(el);
+          setTimeout(resolve, 15000);
+        });
+        if (typeof window.SentinelSDK !== 'undefined') return true;
+      }
+      return false;
+    };
+    if (!(await loadSentinel())) {
       log('CGPT_ERR:SentinelSDK unavailable (Cloudflare/challenge not passed)');
       return;
     }
@@ -329,8 +346,16 @@ def _extract_text(payload: Dict[str, Any]) -> Optional[Tuple[str, str]]:
     dil = payload.get("dil")
     if isinstance(dil, dict):
         constants = dil.get("constants")
-        if isinstance(constants, dict) and isinstance(constants.get("0"), str):
-            return "cumulative", constants["0"]
+        if isinstance(constants, dict):
+            parts: list[str] = []
+            for key in sorted(
+                constants, key=lambda k: int(k) if str(k).isdigit() else str(k)
+            ):
+                value = constants.get(key)
+                if isinstance(value, str):
+                    parts.append(value)
+            if parts:
+                return "cumulative", "".join(parts)
     markdown = payload.get("markdown")
     if isinstance(markdown, str) and markdown:
         return "delta", markdown
@@ -366,14 +391,14 @@ async def _run_browser(
         output: Queue receiving ``("delta", text)``, ``("error", message)``
             and ``("done", None)`` items.
     """
-    session = CDPSession(headless=True, user_agent=CHATGPT_USER_AGENT)
+    session = _ChatGPTSession(headless=True)
     try:
         await session.start()
         await session.navigate(CHATGPT_BASE_URL)
         await _wait_for_challenge(session)
         await session.install_console_capture()
         await session.evaluate_js("window.__cgpt_cursor = 0;")
-        await session.evaluate_js_stdin(_conversation_script(prompt), timeout=120)
+        await session.evaluate_js_stdin(_conversation_script(prompt))
 
         deadline = time.time() + timeout
         current = ""
@@ -471,7 +496,7 @@ class Completions(BaseCompletions):
         timeout: Optional[int] = None,
         proxies: Optional[dict] = None,
         **kwargs: Any,
-    ) -> Union[ChatCompletion, Generator[ChatCompletionChunk, None, None]]:
+    ) -> Any:
         """Create a chat completion using the anonymous ChatGPT web client.
 
         Args:
@@ -624,11 +649,10 @@ class ChatGPT(OpenAICompatibleProvider):
 
 
 if __name__ == "__main__":
-    from litprinter import ic
-
+    from rich import print
     client = ChatGPT()
     response = client.chat.completions.create(
-        model="auto",
+        model="GPT-6-free",
         messages=[
             {"role": "user", "content": "How many r are in strawberry? Answer briefly."}
         ],

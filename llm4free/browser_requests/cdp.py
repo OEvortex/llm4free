@@ -37,7 +37,7 @@ def find_agent_browser() -> str:
     if found:
         return found
     raise RuntimeError(
-        "agent-browser CLI not found. Install it with: npm i -g agent-browser && agent-browser install"
+        "agent-browser CLI not found. Install it with: npm i -g agent-browser"
     )
 
 
