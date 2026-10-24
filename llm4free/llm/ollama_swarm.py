@@ -26,9 +26,8 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Dict, Generator, List, Optional, Tuple, Union
 
-from curl_cffi import CurlError
-from curl_cffi import requests as curl_requests
-from curl_cffi.requests import Session
+import requests
+from requests import RequestException
 
 from llm4free.llm.base import (
     BaseChat,
@@ -142,7 +141,7 @@ def _fofa_discover(max_results: int = 50) -> List[str]:
             "size": min(max_results, 100),
             "fields": _FOFA_FIELDS,
         }
-        with Session() as s:
+        with requests.Session() as s:
             r = s.get(_FOFA_API, params=params, timeout=15)
         r.raise_for_status()
         data = r.json()
@@ -166,8 +165,8 @@ def _fofa_discover(max_results: int = 50) -> List[str]:
 
 def _probe_server(url: str) -> Optional[Tuple[str, List[str]]]:
     """Probe a server for available models using /v1/models or /api/tags."""
-    try:
-        with Session() as s:
+    with requests.Session() as s:
+        try:
             # Try OpenAI-compatible /v1/models endpoint first
             r = s.get(f"{url}/v1/models", timeout=_PROBE_TIMEOUT)
             if r.ok:
@@ -183,23 +182,22 @@ def _probe_server(url: str) -> Optional[Tuple[str, List[str]]]:
                         models.append(model_id)
                 if models:
                     return url, models
-    except Exception:
-        pass
+        except Exception:
+            pass
 
-    try:
-        with Session() as s:
+        try:
             # Fallback to Ollama-native /api/tags endpoint
             r = s.get(f"{url}/api/tags", timeout=_PROBE_TIMEOUT)
-        r.raise_for_status()
-        models = [
-            m.get("name", "")
-            for m in r.json().get("models", [])
-            if "/attacker/" not in m.get("name", "") and not m.get("name", "").startswith("model-b")
-        ]
-        if models:
-            return url, models
-    except Exception:
-        return None
+            r.raise_for_status()
+            models = [
+                m.get("name", "")
+                for m in r.json().get("models", [])
+                if "/attacker/" not in m.get("name", "") and not m.get("name", "").startswith("model-b")
+            ]
+            if models:
+                return url, models
+        except Exception:
+            return None
     return None
 
 
@@ -306,13 +304,8 @@ class Completions(BaseCompletions):
             try:
                 response = self._post_to(server_url, model, prompt, timeout or self._client.timeout)
                 if not response.ok:
-                    if response.status_code in (400, 404, 422):
-                        continue
-                    response.raise_for_status()
-                response.raise_for_status()
-            except CurlError:
-                continue
-            except Exception:
+                    continue
+            except (RequestException, Exception):
                 continue
 
             try:
@@ -371,11 +364,7 @@ class Completions(BaseCompletions):
                 yield stop_chunk
                 return
 
-            except CurlError:
-                if yielded:
-                    raise
-                continue
-            except Exception:
+            except (RequestException, Exception):
                 if yielded:
                     raise
                 continue
@@ -397,11 +386,8 @@ class Completions(BaseCompletions):
             try:
                 response = self._post_to(server_url, model, prompt, timeout or self._client.timeout)
                 if not response.ok:
-                    if response.status_code in (400, 404, 422):
-                        continue
-                    response.raise_for_status()
-                response.raise_for_status()
-            except Exception:
+                    continue
+            except (RequestException, Exception):
                 continue
 
             try:
@@ -484,7 +470,7 @@ class OllamaSwarm(OpenAICompatibleProvider):
             self._servers = {s: ["*"] for s in seed_servers}
             self._model_to_servers = {"*": list(seed_servers)}
 
-        self.session = curl_requests.Session(impersonate="chrome110")
+        self.session = requests.Session()
         self.max_tokens: Optional[int] = None
         self.chat = Chat(self)
 
@@ -523,10 +509,14 @@ class OllamaSwarm(OpenAICompatibleProvider):
 
 if __name__ == "__main__":
     client = OllamaSwarm()
-    response = client.chat.completions.create(
-        model="qwen3:14b",
-        messages=[{"role": "user", "content": "Tell me a joke"}],
-    )
-    if isinstance(response, ChatCompletion):
-        message = response.choices[0].message
-        print(message.content if message else "")
+    for _m in ['beam:cloud', 'deepseek-v4-flash:cloud', 'deepseek-v4-pro:cloud', 'deepseek-v4.1-flash:cloud', 'glm-4.7:cloud', 'glm-5.1:cloud', 'glm-5.2:cloud', 'glm-5.3-flash:cloud', 'glm-5.3:cloud', 'kimi-k2.5:cloud', 'kimi-k2.6:cloud', 'kimi-k2.7-code:cloud', 'kimi-k3:cloud', 'minimax-m2.5:cloud', 'minimax-m2.7:cloud', 'minimax-m3.1-flash:cloud', 'minimax-m3:cloud', 'mistral-large-4:cloud', 'muse-spark-open:cloud', 'nemotron-3-super:cloud', 'nemotron-3-ultra:cloud', 'qwen3-coder-next:cloud', 'qwen3.5:cloud']:
+        try:
+            response = client.chat.completions.create(
+                model=_m,
+                messages=[{"role": "user", "content": "Tell me a joke"}],
+            )
+            if isinstance(response, ChatCompletion):
+                message = response.choices[0].message
+                print(_m, "->", (message.content if message else "")[:80])
+        except Exception as e:
+            print(_m, "ERR", e)
