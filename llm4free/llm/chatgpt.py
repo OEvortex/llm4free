@@ -1,15 +1,29 @@
-import base64
-import hashlib
+"""OpenAI-compatible provider for anonymous ChatGPT (chatgpt.com).
+
+The anonymous web client uses a browser-only flow:
+
+1. Load ``https://chatgpt.com/`` so Cloudflare issues its cookies and the page
+   loads the Sentinel SDK.
+2. Ask the in-page ``SentinelSDK`` for a conversation requirement token
+   (proof-of-work + Cloudflare Turnstile are solved inside the browser).
+3. ``POST /unauth-mweb/conversation/prepare`` to obtain a conduit token.
+4. ``POST /unauth-mweb/conversation/updates`` and consume the NDJSON stream.
+
+All of the above runs through :class:`llm4free.browser_requests.cdp.CDPSession`
+so no request-signing or Turnstile reverse-engineering is required here.
+"""
+
+from __future__ import annotations
+
+import asyncio
 import json
-import random
+import queue
+import threading
 import time
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Dict, Generator, List, Optional, Union, cast
+from typing import Any, Dict, Generator, List, Optional, Tuple, Union
 
-from curl_cffi import requests
-
-# Import base classes and utility structures
+from llm4free.browser_requests.cdp import CDPSession
 from llm4free.llm.base import (
     BaseChat,
     BaseCompletions,
@@ -25,15 +39,45 @@ from llm4free.llm.utils import (
     ChoiceDelta,
     CompletionUsage,
     count_tokens,
+    format_prompt,
 )
 
-# ANSI escape codes for formatting
 BOLD = "\033[1m"
 RED = "\033[91m"
 RESET = "\033[0m"
 
+CHATGPT_BASE_URL = "https://chatgpt.com/"
+# A real Chrome UA is required: Cloudflare rejects the default HeadlessChrome UA.
+CHATGPT_USER_AGENT = (
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36"
+)
+DEFAULT_TIMEOUT = 180
+
+# Console markers emitted by the in-page script.
+_EVENT_PREFIX = "CGPT_EVENT:"
+_ERROR_PREFIX = "CGPT_ERR:"
+_DONE_MARKER = "CGPT_DONE"
+
+# Reads only the console lines produced since the previous poll.
+_CONSOLE_POLL_JS = (
+    "(function(){"
+    "var a=window.__llm4free_console||[];"
+    "var i=window.__cgpt_cursor||0;"
+    "window.__cgpt_cursor=a.length;"
+    "return a.slice(i).join('\\n');"
+    "})()"
+)
+
 
 class ChatGPTReversed:
+    """Lightweight facade over the anonymous ChatGPT browser flow.
+
+    The upstream anonymous endpoint always serves ChatGPT's default model, so
+    every entry in :attr:`AVAILABLE_MODELS` is accepted for API compatibility
+    and routed to that default.
+    """
+
     AVAILABLE_MODELS = [
         "auto",
         "gpt-5-1",
@@ -58,800 +102,521 @@ class ChatGPTReversed:
         "o4-mini",
         "o4-mini-high",
     ]
-    csrf_token = None
-    initialized = False
 
-    _instance = None
+    def __init__(self, model: str = "auto", timeout: int = DEFAULT_TIMEOUT) -> None:
+        """Initialize the reversed client.
 
-    def __new__(cls, model="auto"):
-        if cls._instance is None:
-            cls._instance = super(ChatGPTReversed, cls).__new__(cls)
-            cls._instance.initialized = False
-        return cls._instance
-
-    def __init__(self, model="auto"):
-        if self.initialized:
-            # Already initialized, just update model if needed
-            if model not in self.AVAILABLE_MODELS:
-                raise ValueError(f"Invalid model: {model}. Choose from: {self.AVAILABLE_MODELS}")
-            self.model = model
-            return
-
+        Args:
+            model: Model name from :attr:`AVAILABLE_MODELS`. The anonymous
+                endpoint serves its default model regardless of this value.
+            timeout: Maximum seconds to wait for a complete answer.
+        """
         if model not in self.AVAILABLE_MODELS:
-            raise ValueError(f"Invalid model: {model}. Choose from: {self.AVAILABLE_MODELS}")
-
+            raise ValueError(
+                f"Invalid model: {model}. Choose from: {self.AVAILABLE_MODELS}"
+            )
         self.model = model
-        self.initialize()
+        self.timeout = timeout
 
-    def initialize(self):
-        ChatGPTReversed.initialized = True
+    def initialize(self) -> None:
+        """Backwards-compatible no-op; the browser session is created lazily."""
+        return None
 
-    def random_ip(self):
-        """Generate a random IP address."""
-        return ".".join(str(random.randint(0, 255)) for _ in range(4))
-
-    def random_uuid(self):
-        """Generate a random UUID."""
-        return str(uuid.uuid4())
-
-    def random_float(self, min_val, max_val):
-        """Generate a random float between min and max."""
-        return round(random.uniform(min_val, max_val), 4)
-
-    def simulate_bypass_headers(self, accept, spoof_address=False, pre_oai_uuid=None):
-        """Simulate browser headers to bypass detection."""
-        simulated = {
-            "agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36",
-            "platform": "Windows",
-            "mobile": "?0",
-            "ua": 'Not A(Brand";v="8", "Chromium";v="132", "Google Chrome";v="132',
-        }
-
-        ip = self.random_ip()
-        uuid_val = pre_oai_uuid or self.random_uuid()
-
-        headers = {
-            "accept": accept,
-            "Content-Type": "application/json",
-            "cache-control": "no-cache",
-            "Referer": "https://chatgpt.com/",
-            "Referrer-Policy": "strict-origin-when-cross-origin",
-            "oai-device-id": uuid_val,
-            "User-Agent": simulated["agent"],
-            "pragma": "no-cache",
-            "priority": "u=1, i",
-            "sec-ch-ua": f"{simulated['ua']}",
-            "sec-ch-ua-mobile": simulated["mobile"],
-            "sec-ch-ua-platform": f"{simulated['platform']}",
-            "sec-fetch-site": "same-origin",
-            "sec-fetch-mode": "cors",
-        }
-
-        if spoof_address:
-            headers.update(
-                {
-                    "X-Forwarded-For": ip,
-                    "X-Originating-IP": ip,
-                    "X-Remote-IP": ip,
-                    "X-Remote-Addr": ip,
-                    "X-Host": ip,
-                    "X-Forwarded-Host": ip,
-                }
-            )
-
-        return headers
-
-    def generate_proof_token(self, seed: str, difficulty: str, user_agent: Optional[str] = None):
-        """
-        Improved proof-of-work implementation based on gpt4free/g4f/Provider/openai/proofofwork.py
+    def complete(self, message: str, model: Optional[str] = None) -> str:
+        """Return a complete answer for ``message``.
 
         Args:
-            seed: The seed string for the challenge
-            difficulty: The difficulty hex string
-            user_agent: Optional user agent string
+            message: The user prompt.
+            model: Optional model override.
 
         Returns:
-            The proof token starting with 'gAAAAAB'
+            The assistant response as plain text.
         """
-        if user_agent is None:
-            user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36"
-
-        screen = random.choice([3008, 4010, 6000]) * random.choice([1, 2, 4])
-
-        # Get current UTC time
-        now_utc = datetime.now(timezone.utc)
-        parse_time = now_utc.strftime("%a, %d %b %Y %H:%M:%S GMT")
-
-        proof_token = [
-            screen,
-            parse_time,
-            None,
-            0,
-            user_agent,
-            "https://tcr9i.chat.openai.com/v2/35536E1E-65B4-4D96-9D97-6ADB7EFF8147/api.js",
-            "dpl=1440a687921de39ff5ee56b92807faaadce73f13",
-            "en",
-            "en-US",
-            None,
-            "plugins−[object PluginArray]",
-            random.choice(
-                [
-                    "_reactListeningcfilawjnerp",
-                    "_reactListening9ne2dfo1i47",
-                    "_reactListening410nzwhan2a",
-                ]
-            ),
-            random.choice(["alert", "ontransitionend", "onprogress"]),
-        ]
-
-        diff_len = len(difficulty)
-        for i in range(100000):
-            proof_token[3] = i
-            json_data = json.dumps(proof_token)
-            base = base64.b64encode(json_data.encode()).decode()
-            hash_value = hashlib.sha3_512((seed + base).encode()).digest()
-
-            if hash_value.hex()[:diff_len] <= difficulty:
-                return "gAAAAAB" + base
-
-        # Fallback
-        fallback_base = base64.b64encode(f'"{seed}"'.encode()).decode()
-        return "gAAAAABwQ8Lk5FbGpA2NcR9dShT6gYjU7VxZ4D" + fallback_base
-
-    def solve_sentinel_challenge(self, seed, difficulty):
-        """Solve the sentinel challenge for authentication using improved algorithm."""
-        return self.generate_proof_token(seed, difficulty)
-
-    def generate_fake_sentinel_token(self):
-        """Generate a fake sentinel token for initial authentication."""
-        prefix = "gAAAAAC"
-
-        # More realistic screen sizes
-        screen = random.choice([3008, 4010, 6000]) * random.choice([1, 2, 4])
-
-        # Get current UTC time
-        now_utc = datetime.now(timezone.utc)
-        parse_time = now_utc.strftime("%a, %d %b %Y %H:%M:%S GMT")
-
-        config = [
-            screen,
-            parse_time,
-            4294705152,
-            0,
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36",
-            "de",
-            "de",
-            401,
-            "mediaSession",
-            "location",
-            "scrollX",
-            self.random_float(1000, 5000),
-            str(uuid.uuid4()),
-            "",
-            12,
-            int(time.time() * 1000),
-        ]
-
-        base64_str = base64.b64encode(json.dumps(config).encode()).decode()
-        return prefix + base64_str
-
-    def parse_response(self, input_text):
-        """Parse the response from ChatGPT.
-
-        Args:
-            input_text (str): The response text from ChatGPT.
-
-        Returns:
-            The complete response as a string.
-        """
-        parts = [part.strip() for part in input_text.split("\n") if part.strip()]
-
-        for part in parts:
-            try:
-                if part.startswith("data: "):
-                    json_data = json.loads(part[6:])
-                    if (
-                        json_data.get("message")
-                        and json_data["message"].get("status") == "finished_successfully"
-                        and json_data["message"].get("metadata", {}).get("is_complete")
-                    ):
-                        return json_data["message"]["content"]["parts"][0]
-            except Exception:
-                pass
-
-        return input_text  # Return raw text if parsing fails or no complete message found
-
-    def rotate_session_data(self):
-        """Rotate session data to maintain fresh authentication."""
-        uuid_val = self.random_uuid()
-        csrf_token = self.get_csrf_token(uuid_val)
-        sentinel_token = self.get_sentinel_token(uuid_val, csrf_token)
-
-        ChatGPTReversed.csrf_token = csrf_token
-
-        return {"uuid": uuid_val, "csrf": csrf_token, "sentinel": sentinel_token}
-
-    def get_csrf_token(self, uuid_val):
-        """Get CSRF token for authentication."""
-        if ChatGPTReversed.csrf_token is not None:
-            return ChatGPTReversed.csrf_token
-
-        headers = self.simulate_bypass_headers(
-            accept="application/json", spoof_address=True, pre_oai_uuid=uuid_val
-        )
-
-        response = requests.get("https://chatgpt.com/api/auth/csrf", headers=headers)
-
-        data = response.json()
-        if "csrfToken" not in data:
-            raise Exception("Failed to fetch required CSRF token")
-
-        return data["csrfToken"]
-
-    def get_sentinel_token(self, uuid_val, csrf):
-        """Get sentinel token for authentication."""
-        headers = self.simulate_bypass_headers(
-            accept="application/json", spoof_address=True, pre_oai_uuid=uuid_val
-        )
-
-        test = self.generate_fake_sentinel_token()
-
-        response = requests.post(
-            "https://chatgpt.com/backend-anon/sentinel/chat-requirements",
-            json={"p": test},
-            headers={
-                **headers,
-                "Cookie": f"__Host-next-auth.csrf-token={csrf}; oai-did={uuid_val}; oai-nav-state=1;",
-            },
-        )
-
-        data = response.json()
-        if "token" not in data or "proofofwork" not in data:
-            raise Exception("Failed to fetch required sentinel token")
-
-        oai_sc = None
-        for cookie in response.cookies:
-            if cookie.name == "oai-sc":
-                oai_sc = cookie.value
-                break
-
-        if not oai_sc:
-            raise Exception("Failed to fetch required oai-sc token")
-
-        challenge_token = self.solve_sentinel_challenge(
-            data["proofofwork"]["seed"], data["proofofwork"]["difficulty"]
-        )
-
-        return {"token": data["token"], "proof": challenge_token, "oaiSc": oai_sc}
-
-    def complete(self, message, model=None):
-        """Complete a message using ChatGPT.
-
-        Args:
-            message (str): The message to send to ChatGPT.
-            model (str, optional): The model to use. If None, uses the model specified during initialization.
-                                   Defaults to None.
-
-        Returns:
-            The complete response as a string.
-        """
-        if not ChatGPTReversed.initialized:
-            raise Exception(
-                "ChatGPTReversed has not been initialized. Please initialize the instance before calling this method."
-            )
-
-        # Use the provided model or fall back to the instance model
-        selected_model = model if model else self.model
-
-        # Validate the model
+        selected_model = model or self.model
         if selected_model not in self.AVAILABLE_MODELS:
             raise ValueError(
                 f"Invalid model: {selected_model}. Choose from: {self.AVAILABLE_MODELS}"
             )
+        return "".join(_stream_conversation(message, self.timeout))
 
-        session_data = self.rotate_session_data()
 
-        headers = self.simulate_bypass_headers(
-            accept="plain/text",  # Changed accept header as we expect full response now
-            spoof_address=True,
-            pre_oai_uuid=session_data["uuid"],
-        )
+def _build_prompt(messages: List[Dict[str, Any]]) -> str:
+    """Flatten OpenAI-style messages into a single prompt for the web client."""
+    if not messages:
+        raise ValueError("ChatGPT requires at least one message")
+    if len(messages) == 1 and messages[0].get("role") == "user":
+        return str(messages[0].get("content") or "")
+    return format_prompt(messages, include_system=True)
 
-        headers.update(
-            {
-                "Cookie": f"__Host-next-auth.csrf-token={session_data['csrf']}; oai-did={session_data['uuid']}; oai-nav-state=1; oai-sc={session_data['sentinel']['oaiSc']};",
-                "openai-sentinel-chat-requirements-token": session_data["sentinel"]["token"],
-                "openai-sentinel-proof-token": session_data["sentinel"]["proof"],
-            }
-        )
 
-        payload = {
-            "action": "next",
-            "messages": [
-                {
-                    "id": self.random_uuid(),
-                    "author": {"role": "user"},
-                    "content": {"content_type": "text", "parts": [message]},
-                    "metadata": {},
-                }
-            ],
-            "parent_message_id": self.random_uuid(),
-            "model": selected_model,  # Use the selected model
-            "timezone_offset_min": -120,
-            "suggestions": [],
-            "history_and_training_disabled": False,
-            "conversation_mode": {
-                "kind": "primary_assistant",
-                "plugin_ids": None,  # Ensure web search is not used
-            },
-            "force_paragen": False,
-            "force_paragen_model_slug": "",
-            "force_nulligen": False,
-            "force_rate_limit": False,
-            "reset_rate_limits": False,
-            "websocket_request_id": self.random_uuid(),
-            "force_use_sse": True,  # Keep SSE for receiving the full response
+def _conversation_script(prompt: str) -> str:
+    """Build the in-page script that performs the whole anonymous flow."""
+    script = r"""
+(async () => {
+  const log = (m) => console.log(m);
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  try {
+    const prompt = __PROMPT__;
+
+    // Wait for the page's Sentinel SDK (it is injected after hydration).
+    let waited = 0;
+    while (typeof window.SentinelSDK === 'undefined' && waited < 60000) {
+      await sleep(500);
+      waited += 500;
+    }
+    if (typeof window.SentinelSDK === 'undefined') {
+      log('CGPT_ERR:SentinelSDK unavailable (Cloudflare/challenge not passed)');
+      return;
+    }
+
+    // Ask the SDK for proof-of-work + Turnstile-backed requirements.
+    let req = null;
+    for (let attempt = 0; attempt < 5 && !req; attempt++) {
+      try {
+        await window.SentinelSDK.init('conversation');
+        const raw = await window.SentinelSDK.token('conversation');
+        if (raw) {
+          const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          if (parsed && parsed.c && parsed.p && parsed.t) req = parsed;
         }
+      } catch (err) {
+        log('CGPT_WARN:token attempt failed: ' + err);
+      }
+      if (!req) await sleep(1200);
+    }
+    if (!req) {
+      log('CGPT_ERR:Sentinel requirements token unavailable');
+      return;
+    }
 
-        response = requests.post(
-            "https://chatgpt.com/backend-anon/conversation", json=payload, headers=headers
-        )
+    const sessionId = crypto.randomUUID();
+    const operationId = crypto.randomUUID();
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    const timezoneOffset = new Date().getTimezoneOffset();
+    const contextual = JSON.stringify({
+      app_name: 'chatgpt.com',
+      has_web_push_capabilities: true,
+      is_dark_mode: false,
+      web_push_notification_permission: 'default',
+      page_height: window.innerHeight,
+      page_width: window.innerWidth,
+      pixel_ratio: window.devicePixelRatio || 1,
+      screen_height: window.screen.height,
+      screen_width: window.screen.width,
+      time_since_loaded: Math.round(performance.now() / 1000),
+    });
+    const conversationState = JSON.stringify({
+      messages: [],
+      parentMessageId: 'client-created-root',
+      safety: { dismissedInterventionIds: [] },
+      userMessageCount: 0,
+    });
+    const retryOwner = JSON.stringify({ mode: 'anonymous', sessionEpoch: null });
 
-        if response.status_code != 200:
-            raise Exception(f"HTTP error! status: {response.status_code}")
+    const prepareBody = new URLSearchParams({
+      conversationRetryOwner: retryOwner,
+      conversationState: conversationState,
+      clientContextualInfo: contextual,
+      timezone: timezone,
+      timezoneOffsetMinutes: String(timezoneOffset),
+    });
+    const prepare = await fetch(
+      '/unauth-mweb/conversation/prepare?lightweight_authenticated=0',
+      {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded;charset=UTF-8',
+          'oai-session-id': sessionId,
+          'x-web-mobile-prepare-state': 'none',
+          'x-web-mobile-prepare-reason': 'context_change',
+        },
+        body: prepareBody.toString(),
+      }
+    );
+    if (!prepare.ok) {
+      log('CGPT_ERR:prepare ' + prepare.status + ' ' + (await prepare.text()).slice(0, 300));
+      return;
+    }
+    const prepared = await prepare.json();
 
-        return self.parse_response(response.text)
+    const updatesBody = new URLSearchParams({
+      conversationState: conversationState,
+      messageMetadata: '',
+      'oai-session-id': sessionId,
+      imageAttachments: '[]',
+      pendingImageUploads: '[]',
+      prompt: prompt,
+      clientContextualInfo: contextual,
+      imageSaveData: 'off',
+      imageEffectiveType: '4g',
+      timezone: timezone,
+      timezoneOffsetMinutes: String(timezoneOffset),
+      conversationRetryOwner: retryOwner,
+      workOrigin: '',
+      workModel: '',
+      workEffort: '',
+      workTier: '',
+      assistantMessageId: 'pending-' + crypto.randomUUID(),
+      userMessageId: crypto.randomUUID(),
+      chatRequirementsToken: req.c,
+      proofToken: req.p,
+      turnstileToken: req.t,
+      telemetryToken: '',
+      timingToken: '[1,null]',
+    });
+    const updates = await fetch(
+      '/unauth-mweb/conversation/updates?lightweight_authenticated=0&operationId=' + operationId,
+      {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          accept: 'application/vnd.openai.conversation-source+ndjson',
+          'content-type': 'application/x-www-form-urlencoded;charset=UTF-8',
+          'oai-session-id': sessionId,
+          'x-conduit-token': prepared.conduit_token || '',
+          'x-oai-turn-trace-id': crypto.randomUUID(),
+          'x-web-mobile-prepare-state': 'success',
+          'x-web-mobile-conversation-renderer': 'octane',
+          'x-web-mobile-conversation-source': '2',
+          'x-web-mobile-conversation-stream-protocol': '2',
+          'x-openai-beacon-google-auth': '1',
+        },
+        body: updatesBody.toString(),
+      }
+    );
+    if (!updates.ok) {
+      log('CGPT_ERR:updates ' + updates.status + ' ' + (await updates.text()).slice(0, 300));
+      return;
+    }
+
+    const reader = updates.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        if (line.trim()) log('CGPT_EVENT:' + line);
+      }
+    }
+    if (buffer.trim()) log('CGPT_EVENT:' + buffer);
+    log('CGPT_DONE');
+  } catch (err) {
+    log('CGPT_ERR:' + (err && err.stack ? err.stack : String(err)));
+  }
+})();
+"""
+    return script.replace("__PROMPT__", json.dumps(prompt))
+
+
+def _extract_text(payload: Dict[str, Any]) -> Optional[Tuple[str, str]]:
+    """Extract text from one NDJSON conversation event.
+
+    Args:
+        payload: A decoded event from the conversation source stream.
+
+    Returns:
+        ``("cumulative", text)`` when the event carries the full message so
+        far, ``("delta", text)`` when it carries only a new fragment, or
+        ``None`` when the event has no assistant text.
+    """
+    if payload.get("type") != "content":
+        return None
+    dil = payload.get("dil")
+    if isinstance(dil, dict):
+        constants = dil.get("constants")
+        if isinstance(constants, dict) and isinstance(constants.get("0"), str):
+            return "cumulative", constants["0"]
+    markdown = payload.get("markdown")
+    if isinstance(markdown, str) and markdown:
+        return "delta", markdown
+    return None
+
+
+async def _wait_for_challenge(session: CDPSession, attempts: int = 15) -> None:
+    """Wait for a Cloudflare interstitial to clear, nudging Turnstile if needed."""
+    for _ in range(attempts):
+        try:
+            title = await session.get_title()
+        except Exception:
+            title = ""
+        if "just a moment" not in (title or "").lower():
+            return
+        try:
+            await session.bypass_turnstile()
+        except Exception:
+            pass
+        await asyncio.sleep(1)
+
+
+async def _run_browser(
+    prompt: str,
+    timeout: int,
+    output: "queue.Queue[Tuple[str, Optional[str]]]",
+) -> None:
+    """Run the browser conversation and push deltas onto ``output``.
+
+    Args:
+        prompt: Flattened user prompt.
+        timeout: Maximum seconds to wait for the stream to finish.
+        output: Queue receiving ``("delta", text)``, ``("error", message)``
+            and ``("done", None)`` items.
+    """
+    session = CDPSession(headless=True, user_agent=CHATGPT_USER_AGENT)
+    try:
+        await session.start()
+        await session.navigate(CHATGPT_BASE_URL)
+        await _wait_for_challenge(session)
+        await session.install_console_capture()
+        await session.evaluate_js("window.__cgpt_cursor = 0;")
+        await session.evaluate_js_stdin(_conversation_script(prompt), timeout=120)
+
+        deadline = time.time() + timeout
+        current = ""
+        while time.time() < deadline:
+            try:
+                chunk = await session.evaluate_js(_CONSOLE_POLL_JS)
+            except Exception:
+                await asyncio.sleep(0.5)
+                continue
+            if isinstance(chunk, str) and chunk:
+                for line in chunk.split("\n"):
+                    if not line:
+                        continue
+                    if line.startswith(_ERROR_PREFIX):
+                        output.put(("error", line[len(_ERROR_PREFIX) :].strip()))
+                        return
+                    if line.startswith(_DONE_MARKER):
+                        output.put(("done", None))
+                        return
+                    if not line.startswith(_EVENT_PREFIX):
+                        continue
+                    raw = line[len(_EVENT_PREFIX) :]
+                    try:
+                        event = json.loads(raw)
+                    except json.JSONDecodeError:
+                        continue
+                    extracted = _extract_text(event)
+                    if extracted is None:
+                        continue
+                    mode, text = extracted
+                    if mode == "cumulative":
+                        if text.startswith(current):
+                            delta = text[len(current) :]
+                        else:
+                            delta = text
+                        current = text
+                    else:
+                        delta = text
+                        current += text
+                    if delta:
+                        output.put(("delta", delta))
+            await asyncio.sleep(0.3)
+
+        output.put(("error", f"timed out after {timeout}s waiting for ChatGPT"))
+    except Exception as exc:
+        output.put(("error", str(exc)))
+    finally:
+        try:
+            await session.close()
+        except Exception:
+            pass
+
+
+def _stream_conversation(prompt: str, timeout: int = DEFAULT_TIMEOUT) -> Generator[str, None, None]:
+    """Yield assistant text deltas produced by a browser conversation."""
+    output: "queue.Queue[Tuple[str, Optional[str]]]" = queue.Queue()
+
+    def worker() -> None:
+        try:
+            asyncio.run(_run_browser(prompt, timeout, output))
+        except Exception as exc:  # pragma: no cover - defensive
+            output.put(("error", str(exc)))
+
+    thread = threading.Thread(target=worker, daemon=True)
+    thread.start()
+
+    while True:
+        try:
+            kind, value = output.get(timeout=timeout + 60)
+        except queue.Empty as exc:
+            raise IOError("ChatGPT browser request timed out") from exc
+        if kind == "delta" and value:
+            yield value
+        elif kind == "error":
+            raise IOError(f"ChatGPT request failed: {value}")
+        elif kind == "done":
+            break
 
 
 class Completions(BaseCompletions):
-    def __init__(self, client: "ChatGPT"):
+    def __init__(self, client: "ChatGPT") -> None:
         self._client = client
-        self._chatgpt_reversed = None
 
     def create(
         self,
         *,
         model: str,
-        messages: List[Dict[str, str]],
+        messages: List[Dict[str, Any]],
         max_tokens: Optional[int] = None,
         stream: bool = False,
         temperature: Optional[float] = None,
         top_p: Optional[float] = None,
-        tools: Optional[List[Union[Tool, Dict[str, Any]]]] = None,  # Support for tool definitions
-        tool_choice: Optional[
-            Union[str, Dict[str, Any]]
-        ] = None,  # Support for tool_choice parameter
+        tools: Optional[List[Union[Tool, Dict[str, Any]]]] = None,
+        tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         timeout: Optional[int] = None,
         proxies: Optional[dict] = None,
         **kwargs: Any,
     ) -> Union[ChatCompletion, Generator[ChatCompletionChunk, None, None]]:
-        """
-        Create a chat completion with ChatGPT API.
+        """Create a chat completion using the anonymous ChatGPT web client.
 
         Args:
-            model: The model to use (from AVAILABLE_MODELS)
-            messages: List of message dictionaries with 'role' and 'content'
-            max_tokens: Maximum number of tokens to generate
-            stream: Whether to stream the response
-            temperature: Sampling temperature (0-1)
-            top_p: Nucleus sampling parameter (0-1)
-            tools: List of tool definitions available for the model to use
-            tool_choice: Control over which tool the model should use
-            **kwargs: Additional parameters to pass to the API
+            model: Model name (all names route to the anonymous default model).
+            messages: OpenAI-style conversation messages.
+            max_tokens: Ignored by the anonymous endpoint.
+            stream: Return a chunk generator when ``True``.
+            temperature: Ignored by the anonymous endpoint.
+            top_p: Ignored by the anonymous endpoint.
+            tools: Ignored here; enabled through the base provider's XML loop.
+            tool_choice: Ignored by the anonymous endpoint.
+            timeout: Maximum seconds to wait for the answer.
+            proxies: Ignored; configure the browser network instead.
+            **kwargs: Extra parameters accepted for interface compatibility.
 
         Returns:
-            If stream=False, returns a ChatCompletion object
-            If stream=True, returns a Generator yielding ChatCompletionChunk objects
+            A :class:`ChatCompletion` or a generator of
+            :class:`ChatCompletionChunk` objects.
         """
-        # Initialize ChatGPTReversed if not already initialized
-        if self._chatgpt_reversed is None:
-            self._chatgpt_reversed = ChatGPTReversed(model=model)
+        del max_tokens, temperature, top_p, tools, tool_choice, proxies, kwargs
+        if model not in ChatGPTReversed.AVAILABLE_MODELS:
+            model = "auto"
+        prompt = _build_prompt(messages)
+        request_id = f"chatcmpl-{uuid.uuid4()}"
+        created_time = int(time.time())
+        actual_timeout = timeout or self._client.timeout
 
-        # Use streaming implementation if requested
         if stream:
-            return self._create_streaming(
-                model=model,
-                messages=messages,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                top_p=top_p,
-                tools=tools,
-                tool_choice=tool_choice,
-                timeout=timeout,
-                proxies=proxies,
-                **kwargs,
-            )
-
-        # Otherwise use non-streaming implementation
+            return self._create_streaming(request_id, created_time, model, prompt, actual_timeout)
         return self._create_non_streaming(
-            model=model,
-            messages=messages,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            top_p=top_p,
-            tools=tools,
-            tool_choice=tool_choice,
-            timeout=timeout,
-            proxies=proxies,
-            **kwargs,
+            request_id, created_time, model, messages, prompt, actual_timeout
         )
 
     def _create_streaming(
         self,
-        *,
+        request_id: str,
+        created_time: int,
         model: str,
-        messages: List[Dict[str, str]],
-        max_tokens: Optional[int] = None,
-        temperature: Optional[float] = None,
-        top_p: Optional[float] = None,
-        tools: Optional[List[Union[Tool, Dict[str, Any]]]] = None,
-        tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
-        timeout: Optional[int] = None,
-        proxies: Optional[dict] = None,
-        **kwargs: Any,
+        prompt: str,
+        timeout: int,
     ) -> Generator[ChatCompletionChunk, None, None]:
-        """Implementation for streaming chat completions."""
-        try:
-            # Generate request ID and timestamp
-            request_id = str(uuid.uuid4())
-            created_time = int(time.time())
-
-            # Get the last user message
-            last_user_message = None
-            for msg in reversed(messages):
-                if msg["role"] == "user":
-                    last_user_message = msg["content"]
-                    break
-
-            if not last_user_message:
-                raise ValueError("No user message found in the conversation")
-
-            # Initialize ChatGPTReversed if not already initialized
-            if self._chatgpt_reversed is None:
-                self._chatgpt_reversed = ChatGPTReversed(model=model)
-
-            # Create a proper streaming request to ChatGPT
-            session_data = self._chatgpt_reversed.rotate_session_data()
-
-            headers = self._chatgpt_reversed.simulate_bypass_headers(
-                accept="text/event-stream", spoof_address=True, pre_oai_uuid=session_data["uuid"]
+        """Yield OpenAI-compatible chunks as the browser stream arrives."""
+        for delta_text in _stream_conversation(prompt, timeout):
+            yield ChatCompletionChunk(
+                id=request_id,
+                choices=[
+                    Choice(
+                        index=0,
+                        delta=ChoiceDelta(content=delta_text, role="assistant"),
+                        finish_reason=None,
+                    )
+                ],
+                created=created_time,
+                model=model,
             )
-
-            headers.update(
-                {
-                    "Cookie": f"__Host-next-auth.csrf-token={session_data['csrf']}; oai-did={session_data['uuid']}; oai-nav-state=1; oai-sc={session_data['sentinel']['oaiSc']};",
-                    "openai-sentinel-chat-requirements-token": session_data["sentinel"]["token"],
-                    "openai-sentinel-proof-token": session_data["sentinel"]["proof"],
-                }
-            )
-
-            # Format messages properly for ChatGPT
-            formatted_messages = []
-            for i, msg in enumerate(messages):
-                formatted_messages.append(
-                    {
-                        "id": str(uuid.uuid4()),
-                        "author": {"role": msg["role"]},
-                        "content": {"content_type": "text", "parts": [msg["content"]]},
-                        "metadata": {},
-                    }
-                )
-
-            payload: Dict[str, Any] = {
-                "action": "next",
-                "messages": formatted_messages,
-                "parent_message_id": str(uuid.uuid4()),
-                "model": model,
-                "timezone_offset_min": -120,
-                "suggestions": [],
-                "history_and_training_disabled": False,
-                "conversation_mode": {"kind": "primary_assistant", "plugin_ids": None},
-                "force_paragem": False,
-                "force_paragem_model_slug": "",
-                "force_nulligen": False,
-                "force_rate_limit": False,
-                "reset_rate_limits": False,
-                "websocket_request_id": str(uuid.uuid4()),
-                "force_use_sse": True,
-            }
-
-            # Add optional parameters if provided
-            if max_tokens is not None:
-                payload["max_tokens"] = max_tokens
-            if temperature is not None:
-                payload["temperature"] = temperature
-            if top_p is not None:
-                payload["top_p"] = top_p
-
-            # Make the actual streaming request
-            response = requests.post(
-                "https://chatgpt.com/backend-anon/conversation",
-                json=payload,
-                headers=headers,
-                stream=True,
-                timeout=timeout or 30,
-            )
-
-            response.raise_for_status()
-
-            # Track conversation state
-            full_content = ""
-            prompt_tokens = count_tokens(str(messages))
-            completion_tokens = 0
-            total_tokens = prompt_tokens
-
-            # Process the streaming response
-            for line in response.iter_lines(decode_unicode=True):
-                if line:
-                    if line.startswith("data: "):
-                        data_str = line[6:]  # Remove "data: " prefix
-
-                        # Handle [DONE] message
-                        if data_str.strip() == "[DONE]":
-                            # Final chunk with finish_reason
-                            delta = ChoiceDelta(content=None)
-                            choice = Choice(index=0, delta=delta, finish_reason="stop")
-                            chunk = ChatCompletionChunk(
-                                id=request_id, choices=[choice], created=created_time, model=model
-                            )
-                            chunk.usage = {
-                                "prompt_tokens": prompt_tokens,
-                                "completion_tokens": completion_tokens,
-                                "total_tokens": total_tokens,
-                            }
-                            yield chunk
-                            break
-
-                        try:
-                            data = json.loads(data_str)
-
-                            # Handle different types of messages
-                            if data.get("message"):
-                                message = data["message"]
-
-                                # Handle assistant responses
-                                if message.get("author", {}).get("role") == "assistant":
-                                    content_parts = message.get("content", {}).get("parts", [])
-                                    if content_parts:
-                                        new_content = content_parts[0]
-
-                                        # Get the delta (new content since last chunk)
-                                        delta_content = (
-                                            new_content[len(full_content) :]
-                                            if new_content.startswith(full_content)
-                                            else new_content
-                                        )
-                                        full_content = new_content
-                                        completion_tokens = count_tokens(full_content)
-                                        total_tokens = prompt_tokens + completion_tokens
-
-                                        # Only yield chunk if there's new content
-                                        if delta_content:
-                                            delta = ChoiceDelta(
-                                                content=delta_content, role="assistant"
-                                            )
-                                            choice = Choice(
-                                                index=0, delta=delta, finish_reason=None
-                                            )
-                                            chunk = ChatCompletionChunk(
-                                                id=request_id,
-                                                choices=[choice],
-                                                created=created_time,
-                                                model=model,
-                                            )
-                                            chunk.usage = {
-                                                "prompt_tokens": prompt_tokens,
-                                                "completion_tokens": completion_tokens,
-                                                "total_tokens": total_tokens,
-                                            }
-                                            yield chunk
-
-                                # Handle finish status
-                                if message.get("status") == "finished_successfully":
-                                    pass
-
-                            elif data.get("type") == "message_stream_complete":
-                                # Stream is complete
-                                pass
-
-                        except json.JSONDecodeError:
-                            # Skip invalid JSON lines
-                            continue
-
-        except Exception as e:
-            raise IOError(f"ChatGPT request failed: {e}") from e
+        yield ChatCompletionChunk(
+            id=request_id,
+            choices=[
+                Choice(index=0, delta=ChoiceDelta(content=None), finish_reason="stop")
+            ],
+            created=created_time,
+            model=model,
+        )
 
     def _create_non_streaming(
         self,
-        *,
+        request_id: str,
+        created_time: int,
         model: str,
-        messages: List[Dict[str, str]],
-        max_tokens: Optional[int] = None,
-        temperature: Optional[float] = None,
-        top_p: Optional[float] = None,
-        tools: Optional[List[Union[Tool, Dict[str, Any]]]] = None,
-        tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
-        timeout: Optional[int] = None,
-        proxies: Optional[dict] = None,
-        **kwargs: Any,
+        messages: List[Dict[str, Any]],
+        prompt: str,
+        timeout: int,
     ) -> ChatCompletion:
-        """Implementation for non-streaming chat completions."""
-        try:
-            # Generate request ID and timestamp
-            request_id = str(uuid.uuid4())
-            created_time = int(time.time())
-
-            # Initialize ChatGPTReversed if not already initialized
-            if self._chatgpt_reversed is None:
-                self._chatgpt_reversed = ChatGPTReversed(model=model)
-
-            # Create a proper request to ChatGPT
-            session_data = self._chatgpt_reversed.rotate_session_data()
-
-            headers = self._chatgpt_reversed.simulate_bypass_headers(
-                accept="text/event-stream", spoof_address=True, pre_oai_uuid=session_data["uuid"]
-            )
-
-            headers.update(
-                {
-                    "Cookie": f"__Host-next-auth.csrf-token={session_data['csrf']}; oai-did={session_data['uuid']}; oai-nav-state=1; oai-sc={session_data['sentinel']['oaiSc']};",
-                    "openai-sentinel-chat-requirements-token": session_data["sentinel"]["token"],
-                    "openai-sentinel-proof-token": session_data["sentinel"]["proof"],
-                }
-            )
-
-            # Format messages properly for ChatGPT
-            formatted_messages = []
-            for i, msg in enumerate(messages):
-                formatted_messages.append(
-                    {
-                        "id": str(uuid.uuid4()),
-                        "author": {"role": msg["role"]},
-                        "content": {"content_type": "text", "parts": [msg["content"]]},
-                        "metadata": {},
-                    }
+        """Collect the browser stream into a single completion object."""
+        content = "".join(_stream_conversation(prompt, timeout))
+        prompt_tokens = count_tokens(format_prompt(messages))
+        completion_tokens = count_tokens(content)
+        usage = CompletionUsage(
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=prompt_tokens + completion_tokens,
+        )
+        return ChatCompletion(
+            id=request_id,
+            choices=[
+                Choice(
+                    index=0,
+                    message=ChatCompletionMessage(role="assistant", content=content),
+                    finish_reason="stop",
                 )
-
-            payload: Dict[str, Any] = {
-                "action": "next",
-                "messages": formatted_messages,
-                "parent_message_id": str(uuid.uuid4()),
-                "model": model,
-                "timezone_offset_min": -120,
-                "suggestions": [],
-                "history_and_training_disabled": False,
-                "conversation_mode": {"kind": "primary_assistant", "plugin_ids": None},
-                "force_paragem": False,
-                "force_paragem_model_slug": "",
-                "force_nulligen": False,
-                "force_rate_limit": False,
-                "reset_rate_limits": False,
-                "websocket_request_id": str(uuid.uuid4()),
-                "force_use_sse": True,
-            }
-
-            # Add optional parameters if provided
-            if max_tokens is not None:
-                payload["max_tokens"] = max_tokens
-            if temperature is not None:
-                payload["temperature"] = temperature
-            if top_p is not None:
-                payload["top_p"] = top_p
-
-            # Make the request and collect full response
-            response = requests.post(
-                "https://chatgpt.com/backend-anon/conversation",
-                json=payload,
-                headers=headers,
-                stream=True,
-                timeout=timeout or 30,
-            )
-
-            response.raise_for_status()
-
-            # Collect and parse the full response
-            full_response = ""
-            for line in response.iter_lines(decode_unicode=True):
-                if line:
-                    if line.startswith("data: "):
-                        data_str = line[6:]  # Remove "data: " prefix
-
-                        # Handle [DONE] message
-                        if data_str.strip() == "[DONE]":
-                            break
-
-                        try:
-                            data = json.loads(data_str)
-
-                            # Handle assistant responses
-                            if (
-                                data.get("message")
-                                and data["message"].get("author", {}).get("role") == "assistant"
-                            ):
-                                content_parts = data["message"].get("content", {}).get("parts", [])
-                                if content_parts:
-                                    full_response = content_parts[0]
-
-                        except json.JSONDecodeError:
-                            # Skip invalid JSON lines
-                            continue
-
-            # Create the completion message
-            message = ChatCompletionMessage(role="assistant", content=full_response)
-
-            # Create the choice
-            choice = Choice(index=0, message=message, finish_reason="stop")
-
-            # Calculate token usage using count_tokens
-            # Count tokens in the input messages (prompt)
-            prompt_tokens = count_tokens(str(messages))
-            # Count tokens in the response (completion)
-            completion_tokens = count_tokens(full_response)
-            total_tokens = prompt_tokens + completion_tokens
-
-            usage = CompletionUsage(
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-                total_tokens=total_tokens,
-            )
-
-            # Create the completion object with correct OpenAI format
-            completion = ChatCompletion(
-                id=request_id,
-                choices=[choice],
-                created=created_time,
-                model=model,
-                usage=usage,
-            )
-
-            return completion
-
-        except Exception as e:
-            print(f"{RED}Error during ChatGPT non-stream request: {e}{RESET}")
-            raise IOError(f"ChatGPT request failed: {e}") from e
+            ],
+            created=created_time,
+            model=model,
+            usage=usage,
+        )
 
 
 class Chat(BaseChat):
-    def __init__(self, client: "ChatGPT"):
+    def __init__(self, client: "ChatGPT") -> None:
         self.completions = Completions(client)
 
 
 class ChatGPT(OpenAICompatibleProvider):
-    """
-    OpenAI-compatible client for ChatGPT API.
+    """OpenAI-compatible client for anonymous ChatGPT.
 
     Usage:
         client = ChatGPT()
         response = client.chat.completions.create(
             model="auto",
-            messages=[{"role": "user", "content": "Hello!"}]
+            messages=[{"role": "user", "content": "Hello!"}],
         )
         print(response.choices[0].message.content)
     """
 
     required_auth = False
+    default_model = "auto"
 
     def __init__(
         self,
         api_key: Optional[str] = None,
         tools: Optional[List[Tool]] = None,
         proxies: Optional[Dict[str, str]] = None,
-    ):
-        """
-        Initialize the ChatGPT client.
+        timeout: int = DEFAULT_TIMEOUT,
+    ) -> None:
+        """Initialize the ChatGPT client.
 
         Args:
-            api_key: Optional API key (not used by ChatGPTReversed but included for interface compatibility)
-            tools: Optional list of tools to register with the provider
-            proxies: Optional proxy configuration dict, e.g. {"http": "http://proxy:8080", "https": "https://proxy:8080"}
+            api_key: Unused; included for interface compatibility.
+            tools: Optional list of tools registered with the provider.
+            proxies: Unused; the browser handles its own networking.
+            timeout: Maximum seconds to wait for a complete answer.
         """
         super().__init__(api_key=api_key, tools=tools, proxies=proxies)
-        # Initialize chat interface
+        self.timeout = timeout
         self.chat = Chat(self)
 
     @property
-    def AVAILABLE_MODELS(self):
+    def AVAILABLE_MODELS(self) -> List[str]:
         return ChatGPTReversed.AVAILABLE_MODELS
+
+    @classmethod
+    def get_models(cls, api_key: Optional[str] = None) -> List[str]:
+        """Return the model names accepted by this provider."""
+        del api_key
+        return list(ChatGPTReversed.AVAILABLE_MODELS)
 
     @property
     def models(self) -> SimpleModelList:
@@ -859,12 +624,17 @@ class ChatGPT(OpenAICompatibleProvider):
 
 
 if __name__ == "__main__":
-    # Example usage
+    from litprinter import ic
+
     client = ChatGPT()
     response = client.chat.completions.create(
-        model="o4-mini-high", messages=[{"role": "user", "content": "How many r in strawberry"}]
+        model="auto",
+        messages=[
+            {"role": "user", "content": "How many r are in strawberry? Answer briefly."}
+        ],
+        stream=True,
     )
-    if isinstance(response, ChatCompletion):
-        if response.choices[0].message and response.choices[0].message.content:
-            print(response.choices[0].message.content)
+    for chunk in response:
+        if chunk.choices and chunk.choices[0].delta.content:
+            print(chunk.choices[0].delta.content, end="", flush=True)
     print()

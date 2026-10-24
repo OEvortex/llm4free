@@ -37,7 +37,6 @@ from llm4free.llm.base import (
 from llm4free.llm.chatgpt import ChatGPT, ChatGPTReversed
 
 # Provider implementations
-from llm4free.llm.e2b import E2B
 from llm4free.llm.essentialai import EssentialAI
 from llm4free.llm.exaai import ExaAI
 from llm4free.llm.freeai import FreeAI
@@ -124,7 +123,7 @@ __all__ = [
     "ChatGPT",
     "ChatGPTReversed",
     "DeepInfra",
-    "E2B",
+
     "ExaAI",
     "FreeAssist",
     "Gemini",
