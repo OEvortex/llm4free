@@ -39,13 +39,17 @@ class Completions(BaseCompletions):
         self,
         *,
         model: str,
-        messages: List[Dict[str, str]],
+        messages: List[Dict[str, Any]],
         max_tokens: Optional[int] = 2049,
         stream: bool = False,
         temperature: Optional[float] = None,
         top_p: Optional[float] = None,
+        tools: Optional[List[Union[Any, Dict[str, Any]]]] = None,
+        tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
+        timeout: Optional[int] = None,
+        proxies: Optional[dict] = None,
         **kwargs: Any,
-    ) -> Union[ChatCompletion, Generator[ChatCompletionChunk, None, None]]:
+    ) -> Any:
         """
         Creates a model response for the given chat conversation.
         Mimics openai.chat.completions.create
@@ -286,10 +290,9 @@ class IBM(OpenAICompatibleProvider):
 
     required_auth = False  # No API key required for IBM Granite Playground
     AVAILABLE_MODELS = [
-        "granite-chat",
-        "granite-thinking",
-        "granite-search",
-        "granite-research",
+        "granite-reasoning-deep",
+        "granite-reasoning-nothink",
+        "granite-reasoning-light",
     ]
 
     def get_token(self) -> str:
@@ -402,12 +405,12 @@ if __name__ == "__main__":
     # Test streaming
     print("Testing streaming:")
     response = client.chat.completions.create(
-        model="granite-chat",
+        model="granite-reasoning-nothink",
         messages=[{"role": "user", "content": "Say 'Hello World' in one sentence"}],
         stream=True,
     )
 
-    for chunk in cast(Generator[ChatCompletionChunk, None, None], response):
+    for chunk in response:
         if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
             print(chunk.choices[0].delta.content, end="", flush=True)
     print("\n")
@@ -415,7 +418,7 @@ if __name__ == "__main__":
     # Test non-streaming
     print("Testing non-streaming:")
     response = client.chat.completions.create(
-        model="granite-chat",
+        model="granite-reasoning-nothink",
         messages=[{"role": "user", "content": "Say 'Hello' in one word"}],
         stream=False,
     )

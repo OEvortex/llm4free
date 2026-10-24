@@ -39,7 +39,6 @@ from llm4free.llm.chatgpt import ChatGPT, ChatGPTReversed
 # Provider implementations
 from llm4free.llm.gemini import Gemini
 from llm4free.llm.gptfree import GptFree
-from llm4free.llm.heckai import HeckAI
 from llm4free.llm.ibm import IBM
 from llm4free.llm.k2think import K2Think
 from llm4free.llm.llmchat import LLMChat
@@ -121,7 +120,6 @@ __all__ = [
 
     "Gemini",
     "GptFree",
-    "HeckAI",
     "IBM",
     "ChatJimmy",
     "K2Think",

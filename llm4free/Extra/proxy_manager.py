@@ -40,7 +40,7 @@ from litprinter import ic
 try:  # ``requests`` is an optional dependency of the rest of the project
     from requests.sessions import Session as HttpSession
 except ImportError:  # pragma: no cover - only happens in minimal installs
-    HttpSession = None  # type: ignore[assignment]
+    HttpSession = None  # type: ignore
 
 
 _CLIENT_APP = "URBAN_VPN_BROWSER_EXTENSION"
@@ -458,6 +458,8 @@ class ProxyManager:
             self._thread = None
         if thread is not None and thread.is_alive():
             thread.join(timeout)
+        if self.debug:
+            ic("Proxy manager stopped")
 
     # ------------------------------------------------------------------
     # Monkey patching
@@ -523,9 +525,10 @@ __all__ = ["ProxyManager"]
 
 
 if __name__ == "__main__":
-    manager = ProxyManager(auto_fetch=True, debug=True, max_servers=3)
+    manager = ProxyManager(auto_fetch=True)
     proxies = manager.refresh()
     print(f"Fetched {len(proxies)} proxies")
+    print("Current proxy pool:", manager.proxies)
     manager.monkey_patch()
 
     from curl_cffi import requests as curl_requests
