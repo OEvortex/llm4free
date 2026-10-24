@@ -46,10 +46,12 @@ class Completions(BaseCompletions):
         stream: bool = False,
         temperature: Optional[float] = None,
         top_p: Optional[float] = None,
+        frequency_penalty: Optional[float] = None,
+        presence_penalty: Optional[float] = None,
         timeout: Optional[int] = None,
         proxies: Optional[Dict[str, str]] = None,
         **kwargs: Any,
-    ) -> Union[ChatCompletion, Generator[ChatCompletionChunk, None, None]]:
+    ) -> Union[ChatCompletion, Generator[ChatCompletionChunk, None, None]]:  # type: ignore
         """
         Creates a model response for the given chat conversation.
         Mimics openai.chat.completions.create
@@ -252,33 +254,34 @@ class Toolbaz(OpenAICompatibleProvider):
 
     required_auth = False
     AVAILABLE_MODELS = [
-        # Google
-        "Gemini 3.7 Flash",
-        "Gemini 3.5 Flash",
-        "Gemini-3-Flash",
-        "Gemini 3.1 Pro",
-        "Gemini-2.5-Pro",
-        "Gemini-2.5-Flash",
-        # Anthropic
-        "Claude-Sonnet-4",
-        # OpenAI
-        "GPT-5",
-        "GPT-4o (latest)",
-        "GPT-OSS-120B",
-        "GPT-4o",
-        # xAI
-        "Grok-4-Fast",
         # ToolBaz
+        "ToolBaz V5",
         "ToolBaz-v4.5-Fast",
         "ToolBaz-v4",
-        "ToolBaz-v3.5-Pro",
-        "ToolBaz-v3",
+        # Google
+        "Gemini-3.6-Flash",
+        "Gemini-3-Flash",
+        "Gemini-2.5-Pro",
+        "Gemini-2.5-Flash",
         # DeepSeek
         "Deepseek-V3.1",
         "DeepSeek-V3",
-        "Deepseek-R1-Distill",
+        # OpenAI
+        "GPT-5.2",
+        "GPT-5",
+        "GPT-OSS-120B",
+        "O3-Mini",
+        "GPT-4o (latest)",
+        # Anthropic
+        "Claude-Sonnet-4",
+        # xAI
+        "Grok-4-Fast",
         # Meta
-        "Llama-3.3 (70B)",
+        "Llama-4-Maverick",
+        # Others (Unfiltered)
+        "L3-Euryale-v2.1",
+        "Midnight-Rose",
+        "Unfiltered_X (8x22b)",
     ]
 
     def __init__(self, timeout: int = 30, proxies: dict = {}, browser: str = "chrome"):
