@@ -44,9 +44,7 @@ from llm4free.llm.k2think import K2Think
 from llm4free.llm.miklium import Miklium
 from llm4free.llm.netwrck import Netwrck
 from llm4free.llm.ollama_swarm import OllamaSwarm
-from llm4free.llm.opera_aria import OperaAria
 from llm4free.llm.pi import PiAI
-from llm4free.llm.surfsense import Surfsense
 from llm4free.llm.toolbaz import Toolbaz
 from llm4free.llm.turboseek import TurboSeek
 from llm4free.llm.typliai import TypliAI
@@ -124,7 +122,6 @@ __all__ = [
     "Nvidia",
     "OllamaSwarm",
     "OpenRouter",
-    "OperaAria",
     "TextPollinations",
     "Toolbaz",
     "Upstage",
@@ -137,7 +134,6 @@ __all__ = [
     "UncensoredChat",
     # New free providers (no browser required)
     "Miklium",
-    "Surfsense",
     # NOTE: Cloudflare, DeepInfraFree, Perchance are in llm4free.llm.UNFINISHED
     # (browser-backed; Cloudflare Turnstile does not resolve headless).
 ]
