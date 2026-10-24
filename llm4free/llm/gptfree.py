@@ -74,7 +74,7 @@ class Completions(BaseCompletions):
         timeout: Optional[int] = None,
         proxies: Optional[Dict[str, str]] = None,
         **kwargs: Any,
-    ) -> Union[ChatCompletion, Generator[ChatCompletionChunk, None, None]]:
+    ) -> Any:
         """Create a chat completion with GptFree API."""
         request_id = f"chatcmpl-{uuid.uuid4()}"
         created_time = int(time.time())
@@ -307,7 +307,7 @@ class Completions(BaseCompletions):
         try:
             payload = self._build_payload(messages, kwargs)
             firebase_token = self._get_firebase_token(proxies, timeout)
-            response = self._make_request(payload, firebase_token)
+            response = self._make_request(payload, firebase_token, stream=True)
 
             full_content = ""
             for chunk in self._parse_stream(response, request_id, created_time, model):
