@@ -14,10 +14,9 @@ from __future__ import annotations
 
 import asyncio
 import functools
-import ssl
 from typing import Any
 
-from .base import AsyncTransport, ProxyInfo, RequestSpec, SyncTransport, Timeout
+from .base import AsyncTransport, CertType, ProxyInfo, RequestSpec, SyncTransport, Timeout, VerifyType
 
 
 class AsyncTransportFromSync(AsyncTransport):
@@ -29,7 +28,8 @@ class AsyncTransportFromSync(AsyncTransport):
         request: RequestSpec,
         *,
         timeout: Timeout,
-        verify: bool | ssl.SSLContext,
+        verify: VerifyType,
+        cert: CertType = None,
         proxy: ProxyInfo | None,
         stream: bool,
     ) -> Any:  # -> Response
@@ -41,6 +41,7 @@ class AsyncTransportFromSync(AsyncTransport):
                 request,
                 timeout=timeout,
                 verify=verify,
+                cert=cert,
                 proxy=proxy,
                 stream=stream,
             ),

@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+import os
 import ssl
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Iterator, Protocol, runtime_checkable
 from urllib.parse import urlsplit
 
 from ..models import Headers
+
+# ``verify`` accepts the boolean toggle, a pre-built context, or a path to a CA
+# bundle file / CA directory (mirrors requests' ``verify=``).
+VerifyType = bool | str | os.PathLike | ssl.SSLContext
+# ``cert`` is a client-certificate: a path, or ``(cert_file, key_file)`` or
+# ``(cert_file, key_file, password)`` (mirrors requests' ``cert=``).
+CertType = str | os.PathLike | tuple[Any, ...] | None
 
 
 @dataclass
@@ -91,7 +99,8 @@ class SyncTransport(Protocol):
         request: RequestSpec,
         *,
         timeout: Timeout,
-        verify: bool | ssl.SSLContext,
+        verify: VerifyType,
+        cert: CertType = None,
         proxy: ProxyInfo | None,
         stream: bool,
     ) -> Any:  # -> Response
@@ -107,7 +116,8 @@ class AsyncTransport(Protocol):
         request: RequestSpec,
         *,
         timeout: Timeout,
-        verify: bool | ssl.SSLContext,
+        verify: VerifyType,
+        cert: CertType = None,
         proxy: ProxyInfo | None,
         stream: bool,
     ) -> Any:  # -> Response
@@ -116,14 +126,37 @@ class AsyncTransport(Protocol):
     async def aclose(self) -> None: ...
 
 
-def build_ssl_context(verify: bool | ssl.SSLContext) -> ssl.SSLContext:
-    """Build a client TLS context honoring the ``verify`` toggle."""
+def _load_cert(ctx: ssl.SSLContext, cert: str | os.PathLike | tuple[Any, ...]) -> None:
+    if isinstance(cert, (str, os.PathLike)):
+        ctx.load_cert_chain(os.fspath(cert))
+        return
+    items = list(cert)
+    certfile = os.fspath(items[0])
+    keyfile = os.fspath(items[1]) if len(items) > 1 and items[1] is not None else None
+    password = items[2] if len(items) > 2 else None
+    ctx.load_cert_chain(certfile, keyfile, password)
+
+
+def build_ssl_context(verify: VerifyType, cert: CertType = None) -> ssl.SSLContext:
+    """Build a client TLS context honoring the ``verify`` toggle, CA path and ``cert``."""
     if isinstance(verify, ssl.SSLContext):
-        return verify
-    ctx = ssl.create_default_context()
-    if verify is False:
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
+        ctx = verify
+    else:
+        ctx = ssl.create_default_context()
+        if verify is False:
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+        elif isinstance(verify, (str, os.PathLike)):
+            path = os.fspath(verify)
+            if os.path.isdir(path):
+                ctx.load_verify_locations(capath=path)
+            else:
+                ctx.load_verify_locations(cafile=path)
+    if cert is not None:
+        try:
+            _load_cert(ctx, cert)
+        except ssl.SSLError as ex:
+            raise ValueError(f"Failed to load client certificate {cert!r}: {ex}") from ex
     return ctx
 
 
@@ -150,6 +183,9 @@ __all__ = [
     "SyncTransport",
     "AsyncTransport",
     "build_ssl_context",
+    "VerifyType",
+    "CertType",
     "REDIRECT_STATUSES",
     "DEFAULT_MAX_REDIRECTS",
+    "iter_or_repeat",
 ]

@@ -55,8 +55,37 @@ class Handler(BaseHTTPRequestHandler):
                 "path": self.path,
                 "cookie": self.headers.get("Cookie", ""),
                 "xtest": self.headers.get("X-Test", ""),
+                "auth": self.headers.get("Authorization", ""),
             }
             self._send(200, json.dumps(payload).encode(), "application/json")
+        elif path == "/counter":
+            # Same handler instance serves every request on one keep-alive
+            # connection, so this counter proves socket reuse.
+            self._handled = getattr(self, "_handled", 0) + 1
+            self._send(200, str(self._handled).encode())
+        elif path == "/link":
+            self._send(
+                200, b"ok",
+                extra={"Link": '</echo?page=2>; rel="next", </echo?page=9>; rel="last"'},
+            )
+        elif path == "/two":
+            self.send_response(302)
+            self.send_header("Location", "/redirect")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+        elif path == "/digest":
+            auth = self.headers.get("Authorization", "")
+            if not auth.startswith("Digest"):
+                self.send_response(401)
+                self.send_header(
+                    "WWW-Authenticate",
+                    'Digest realm="testrealm", qop="auth", nonce="dcd98b71", '
+                    'opaque="5ccc069c", algorithm=MD5',
+                )
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+            else:
+                self._send(200, auth.encode())
         elif path == "/redirect":
             self.send_response(302)
             self.send_header("Location", "/echo")
@@ -407,6 +436,18 @@ def test_compat_session_persists_headers_and_cookies(server):
     s.close()
 
 
+def test_compat_session_honors_later_header_mutation(server):
+    # Providers (e.g. cookie-harvester flows) mutate headers after construction;
+    # the persistent pooled client must still see them.
+    from llm4free.browser_requests._http import compat as requests
+
+    s = requests.Session()
+    s.get(f"{server}/echo")  # first call builds the pooled client
+    s.headers["X-Test"] = "late"
+    assert s.get(f"{server}/echo").json()["xtest"] == "late"
+    s.close()
+
+
 def test_compat_session_multipart_and_stream(server):
     from llm4free.browser_requests._http import compat as requests
 
@@ -448,4 +489,140 @@ def test_compat_exception_aliases_exist():
 
     assert CurlError is RequestException is RequestsError
     assert hasattr(compat.exceptions, "Timeout")
+
+
+# --- connection pooling (keep-alive reuse) ---------------------------------
+def test_keepalive_reuses_connection(server):
+    with Client() as c:
+        first = c.get(f"{server}/counter").text
+        second = c.get(f"{server}/counter").text
+        third = c.get(f"{server}/counter").text
+    # Same pooled socket -> the per-connection counter keeps incrementing.
+    assert (first, second, third) == ("1", "2", "3")
+
+
+def test_pooling_disabled_sees_new_connections_per_call(server):
+    from llm4free.browser_requests._http.transport.std_sync import SyncStdTransport
+
+    transport = SyncStdTransport(pool=False)
+    c = Client(transport=transport)
+    values = [c.get(f"{server}/counter").text for _ in range(3)]
+    c.close()
+    # Without pooling each call opens a fresh connection -> counter resets to 1.
+    assert values == ["1", "1", "1"]
+
+
+# --- response.history + response.links -------------------------------------
+def test_redirect_history(server):
+    with Client() as c:
+        r = c.get(f"{server}/two")
+    assert r.status_code == 200
+    assert [h.status_code for h in r.history] == [302, 302]
+    assert "/echo" in r.url
+
+
+def test_response_links(server):
+    with Client() as c:
+        r = c.get(f"{server}/link")
+    assert r.links["next"]["url"].endswith("/echo?page=2")
+    assert r.links["last"]["rel"] == "last"
+
+
+# --- event hooks -----------------------------------------------------------
+def test_event_hooks_fire(server):
+    seen: dict[str, list] = {"request": [], "response": []}
+    with Client(event_hooks={"request": [seen["request"].append],
+                             "response": [seen["response"].append]}) as c:
+        c.get(f"{server}/echo")
+    assert len(seen["request"]) == 1
+    assert len(seen["response"]) == 1
+    assert seen["response"][0].status_code == 200
+
+
+# --- authentication --------------------------------------------------------
+def test_basic_auth_tuple(server):
+    with Client() as c:
+        r = c.get(f"{server}/echo", auth=("user", "pw"))
+    import base64
+
+    expected = "Basic " + base64.b64encode(b"user:pw").decode()
+    assert r.json()["auth"] == expected
+
+
+def test_basic_auth_object_on_client(server):
+    from llm4free.browser_requests._http.auth import BasicAuth
+
+    with Client(auth=BasicAuth("a", "b")) as c:
+        assert c.get(f"{server}/echo").json()["auth"].startswith("Basic ")
+
+
+def test_callable_auth(server):
+    def add_token(headers):
+        return headers.merged({"Authorization": "Bearer xyz"})
+
+    with Client() as c:
+        r = c.get(f"{server}/echo", auth=add_token)
+    assert r.json()["auth"] == "Bearer xyz"
+
+
+def test_digest_auth_challenge_retry(server):
+    from llm4free.browser_requests._http.auth import DigestAuth
+
+    with Client() as c:
+        r = c.get(f"{server}/digest", auth=DigestAuth("mufasa", "secret"))
+    assert r.status_code == 200
+    header = r.text
+    assert header.startswith("Digest ")
+    assert 'nonce="dcd98b71"' in header
+    assert "uri=" in header and "response=" in header and 'qop=auth' in header
+
+
+# --- proxy resolution (per-request > mount > client > env) ------------------
+def test_proxy_resolution_precedence():
+    c = Client(proxy="http://client:8080")
+    c.mount("http://127.0.0.1", "http://mounted:3128")
+    url = "http://127.0.0.1:9/x"
+    # per-request wins
+    assert c._resolve_proxy(url, "http://per:1").port == 1
+    # else mount (longest prefix) wins over client
+    assert c._resolve_proxy(url, None).port == 3128
+    c.close()
+
+
+def test_trust_env_proxy_and_no_proxy(monkeypatch):
+    monkeypatch.setenv("HTTP_PROXY", "http://env-proxy:8888")
+    monkeypatch.setenv("NO_PROXY", "localhost,127.0.0.1")
+    c = Client(trust_env=True)
+    # host is in NO_PROXY -> not proxied
+    assert c._resolve_proxy("http://127.0.0.1/x", None) is None
+    # a different host -> env proxy used
+    assert c._resolve_proxy("http://example.com/x", None).port == 8888
+    # trust_env off -> ignored
+    c2 = Client(trust_env=False)
+    assert c2._resolve_proxy("http://example.com/x", None) is None
+    c.close()
+
+
+# --- auth/netconfig units (no I/O) -----------------------------------------
+def test_netrc_auth_parses(monkeypatch, tmp_path):
+    from llm4free.browser_requests._http.netconfig import netrc_auth
+
+    netrc = tmp_path / ".netrc"
+    netrc.write_text("machine example.com login bob password s3cret\n")
+    netrc.chmod(0o600)
+    monkeypatch.setenv("NETRC", str(netrc))
+    assert netrc_auth("example.com") == ("bob", "s3cret")
+    assert netrc_auth("missing.com") is None
+
+
+def test_no_proxy_match(monkeypatch):
+    from llm4free.browser_requests._http.netconfig import no_proxy_match
+
+    monkeypatch.setenv("NO_PROXY", "a.com, .b.org")
+    assert no_proxy_match("x.a.com")
+    assert no_proxy_match("host.b.org")
+    assert not no_proxy_match("c.net")
+    monkeypatch.setenv("NO_PROXY", "*")
+    assert no_proxy_match("anything")
+
 

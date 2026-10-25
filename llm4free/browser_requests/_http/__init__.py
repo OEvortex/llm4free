@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from .async_client import AsyncClient, AsyncResponse
 from . import compat
+from .auth import AuthBase, BasicAuth, BearerAuth, DigestAuth, resolve_auth
 from .client import (
     Client,
     delete,
@@ -56,6 +57,12 @@ __all__ = [
     "Headers",
     "Cookies",
     "ServerSentEvent",
+    # auth
+    "AuthBase",
+    "BasicAuth",
+    "BearerAuth",
+    "DigestAuth",
+    "resolve_auth",
     # helpers
     "request",
     "get",

@@ -58,7 +58,12 @@ class Session:
         proxies: Any = None,
         timeout: Any = None,
         verify: bool = True,
+        cert: Any = None,
         impersonate: str | None = None,
+        http2: bool = False,
+        trust_env: bool = True,
+        auth: Any = None,
+        event_hooks: Any = None,
         allow_redirects: bool = True,
         **_ignored: Any,
     ) -> None:
@@ -66,37 +71,61 @@ class Session:
         self.cookies = cookies if isinstance(cookies, Cookies) else Cookies(cookies or None)
         self.timeout = timeout
         self.verify = verify
+        self.cert = cert
         self.impersonate = impersonate
+        self.http2 = http2
+        self.trust_env = trust_env
+        self.auth = auth
         self.allow_redirects = allow_redirects
         # ``proxies`` mirrors ``requests.Session.proxies`` so the proxy-rotation
         # manager can populate it after construction (``.update({...})``).
-        self.proxies: dict[str, str] = {}
+        self.proxies: dict[str, str] = dict(proxies) if isinstance(proxies, dict) else {}
         self.proxy = _first_proxy(proxies, proxy)
+        self._client: Client | None = None
 
-    def _client(self, headers: Any, cookies: Any, **_kw: Any) -> Client:
-        merged = dict(self.headers)
-        if headers:
-            merged.update(dict(headers))
-        jar = self.cookies
-        if cookies:
-            jar = Cookies(jar.to_dict())
-            jar.update(dict(cookies))
-        return Client(
-            headers=merged,
-            cookies=jar,
-            timeout=self.timeout,
-            verify=self.verify,
-            proxy=_first_proxy(self.proxies, self.proxy),
-            impersonate=self.impersonate,
-        )
+    def _ensure_client(self) -> Client:
+        # One long-lived Client so the stdlib keep-alive pool is reused across
+        # every request on this session. Mutable knobs (verify/proxy/cert/auth/
+        # timeout) are supplied per request; only transport-level config is fixed
+        # here (impersonate / http2), so a rebuild is never required mid-session.
+        if self._client is None:
+            self._client = Client(
+                headers=self.headers,
+                cookies=self.cookies,
+                impersonate=self.impersonate,
+                http2=self.http2,
+                backend="primp",
+            )
+        return self._client
+
+    def mount(self, prefix: str, value: str) -> None:
+        self._ensure_client().mount(prefix, value)
 
     def request(self, method: str, url: str, **kwargs: Any) -> Response:
-        client = self._client(kwargs.get("headers"), kwargs.get("cookies"))
+        client = self._ensure_client()
         kwargs.setdefault("allow_redirects", self.allow_redirects)
+        kwargs.setdefault("verify", self.verify)
+        if self.timeout is not None:
+            kwargs.setdefault("timeout", self.timeout)
+        if self.cert is not None:
+            kwargs.setdefault("cert", self.cert)
+        # Re-forward session headers each call so post-construction mutations
+        # (``session.headers.update(...)``) are always honored.
+        call_headers = dict(self.headers)
+        if kwargs.get("headers"):
+            call_headers.update(dict(kwargs["headers"]))
+        if call_headers:
+            kwargs["headers"] = call_headers
+        if self.auth is not None:
+            kwargs.setdefault("auth", self.auth)
+        # Forward the session proxy as a per-request override so proxy rotation
+        # is honored without rebuilding the pooled client.
+        per_proxy = _first_proxy(self.proxies, self.proxy)
+        if per_proxy and "proxy" not in kwargs and "proxies" not in kwargs:
+            kwargs["proxies"] = per_proxy
         resp = client.request(method, url, **kwargs)
         # persist cookies acquired during the request back onto the session
         self.cookies.update(resp.cookies.to_dict())
-        client.close()
         return resp
 
     def _verb(self, method: str, url: str, **kwargs: Any) -> Response:
@@ -125,7 +154,9 @@ class Session:
         return self.request("OPTIONS", url, **kwargs)
 
     def close(self) -> None:
-        return None
+        if self._client is not None:
+            self._client.close()
+            self._client = None
 
     def __enter__(self) -> "Session":
         return self
@@ -145,34 +176,60 @@ class AsyncSession:
         proxies: Any = None,
         timeout: Any = None,
         verify: bool = True,
+        cert: Any = None,
         impersonate: str | None = None,
+        http2: bool = False,
+        trust_env: bool = True,
+        auth: Any = None,
+        event_hooks: Any = None,
         **_ignored: Any,
     ) -> None:
         self.headers = dict(headers or {})
         self.cookies = cookies if isinstance(cookies, Cookies) else Cookies(cookies or None)
         self.timeout = timeout
         self.verify = verify
+        self.cert = cert
         self.impersonate = impersonate
-        self.proxies: dict[str, str] = {}
+        self.http2 = http2
+        self.trust_env = trust_env
+        self.auth = auth
+        self.proxies: dict[str, str] = dict(proxies) if isinstance(proxies, dict) else {}
         self.proxy = _first_proxy(proxies, proxy)
+        self._client: AsyncClient | None = None
 
-    def _client(self, headers: Any = None) -> AsyncClient:
-        merged = dict(self.headers)
-        if headers:
-            merged.update(dict(headers))
-        return AsyncClient(
-            headers=merged,
-            cookies=self.cookies,
-            timeout=self.timeout,
-            verify=self.verify,
-            proxy=_first_proxy(self.proxies, self.proxy),
-            impersonate=self.impersonate,
-        )
+    def _ensure_client(self) -> AsyncClient:
+        if self._client is None:
+            self._client = AsyncClient(
+                headers=self.headers,
+                cookies=self.cookies,
+                impersonate=self.impersonate,
+                http2=self.http2,
+                backend="primp",
+            )
+        return self._client
+
+    def mount(self, prefix: str, value: str) -> None:
+        self._ensure_client().mount(prefix, value)
 
     async def request(self, method: str, url: str, **kwargs: Any) -> AsyncResponse:
         kwargs.pop("cookies", None)
-        ac = self._client(kwargs.get("headers"))
-        return await ac.request(method, url, **kwargs)
+        client = self._ensure_client()
+        kwargs.setdefault("verify", self.verify)
+        if self.timeout is not None:
+            kwargs.setdefault("timeout", self.timeout)
+        if self.cert is not None:
+            kwargs.setdefault("cert", self.cert)
+        call_headers = dict(self.headers)
+        if kwargs.get("headers"):
+            call_headers.update(dict(kwargs["headers"]))
+        if call_headers:
+            kwargs["headers"] = call_headers
+        if self.auth is not None:
+            kwargs.setdefault("auth", self.auth)
+        per_proxy = _first_proxy(self.proxies, self.proxy)
+        if per_proxy and "proxy" not in kwargs and "proxies" not in kwargs:
+            kwargs["proxies"] = per_proxy
+        return await client.request(method, url, **kwargs)
 
     async def get(self, url: str, **kwargs: Any) -> AsyncResponse:
         return await self.request("GET", url, **kwargs)
@@ -181,7 +238,9 @@ class AsyncSession:
         return await self.request("POST", url, **kwargs)
 
     async def aclose(self) -> None:
-        return None
+        if self._client is not None:
+            await self._client.aclose()
+            self._client = None
 
     async def __aenter__(self) -> "AsyncSession":
         return self
@@ -199,7 +258,12 @@ def request(method: str, url: str, **kwargs: Any) -> Response:
         proxies=kwargs.pop("proxies", None),
         timeout=kwargs.pop("timeout", None),
         verify=kwargs.pop("verify", True),
+        cert=kwargs.pop("cert", None),
         impersonate=kwargs.pop("impersonate", None),
+        http2=kwargs.pop("http2", False),
+        trust_env=kwargs.pop("trust_env", True),
+        auth=kwargs.pop("auth", None),
+        event_hooks=kwargs.pop("event_hooks", None),
     ) as s:
         return s.request(method, url, **kwargs)
 

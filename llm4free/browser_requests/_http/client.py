@@ -7,29 +7,34 @@ requests identically.
 from __future__ import annotations
 
 import json as _json
-from typing import Any
-from urllib.parse import urljoin
+from typing import Any, Callable, cast
+from urllib.parse import urljoin, urlsplit
 
+from .auth import AuthBase, resolve_auth
 from .exceptions import TooManyRedirects
 from .models import Cookies, Headers, Response
 from .multipart import encode_multipart
+from .netconfig import best_mount, env_proxy_for, netrc_auth, no_proxy_match
 from .transport import get_sync_transport
 from .transport.base import (
     DEFAULT_MAX_REDIRECTS,
+    CertType,
     ProxyInfo,
     REDIRECT_STATUSES,
     RequestSpec,
     SyncTransport,
     Timeout,
+    VerifyType,
 )
 from .urls import build_url, encode_params
 
-# Headers every stdlib request carries unless overridden.
+# Headers every stdlib request carries unless overridden. ``Connection:
+# keep-alive`` lets the std transport pool and reuse sockets across requests.
 DEFAULT_HEADERS = Headers(
     {
         "Accept": "*/*",
         "Accept-Encoding": "gzip, deflate",
-        "Connection": "close",
+        "Connection": "keep-alive",
         "User-Agent": "llm4free-http/1.0 (+stdlib)",
     }
 )
@@ -90,6 +95,9 @@ def make_request_spec(
     return RequestSpec(method=method.upper(), url=full_url, headers=merged, body=body)
 
 
+_UNSET = object()
+
+
 class Client:
     """A blocking HTTP client with sessions, cookies, redirects, and streaming."""
 
@@ -100,10 +108,15 @@ class Client:
         headers: Any = None,
         cookies: Any = None,
         timeout: Any = 30,
-        verify: bool = True,
+        verify: VerifyType = True,
+        cert: CertType = None,
         proxy: str | None = None,
         max_redirects: int = DEFAULT_MAX_REDIRECTS,
         impersonate: str | None = None,
+        http2: bool = False,
+        trust_env: bool = True,
+        auth: Any = None,
+        event_hooks: Any = None,
         transport: SyncTransport | None = None,
         backend: str = "primp",
     ) -> None:
@@ -116,19 +129,77 @@ class Client:
             self.cookies = Cookies(dict(cookies))
         self.timeout = Timeout.from_value(timeout)
         self.verify = verify
+        self.cert = cert
         self.proxy = ProxyInfo.parse(proxy) if proxy else None
         self.max_redirects = max_redirects
         self.impersonate = impersonate
-        self._transport = transport or get_sync_transport(impersonate, backend=backend)
+        self.http2 = http2
+        self.trust_env = trust_env
+        self.auth = auth
+        self.mounts: dict[str, str] = {}
+        self.event_hooks: dict[str, list[Callable[[Any], None]]] = {
+            "request": [],
+            "response": [],
+        }
+        for kind, callbacks in (event_hooks or {}).items():
+            self.event_hooks.setdefault(kind, [])
+            self.event_hooks[kind].extend(callbacks)
         self._backend = backend
+        self._transport = transport or get_sync_transport(
+            impersonate, backend=backend, http2=http2
+        )
         self._transport_cache: dict[str | None, SyncTransport] = {impersonate: self._transport}
 
+    def mount(self, prefix: str, value: str) -> None:
+        """Register a proxy (or transport marker) for URLs starting with ``prefix``."""
+        self.mounts[prefix] = value
+
+    # --- resolution helpers ---
     def _resolve_transport(self, impersonate: str | None) -> SyncTransport:
         if impersonate is None or impersonate == self.impersonate:
             return self._transport
         if impersonate not in self._transport_cache:
-            self._transport_cache[impersonate] = get_sync_transport(impersonate, backend=self._backend)
+            self._transport_cache[impersonate] = get_sync_transport(
+                impersonate, backend=self._backend, http2=self.http2
+            )
         return self._transport_cache[impersonate]
+
+    def _resolve_proxy(self, url: str, proxies: Any) -> ProxyInfo | None:
+        # 1. explicit per-request proxies mapping/string wins
+        if proxies:
+            purl = (
+                (proxies.get("https") or proxies.get("http") or proxies.get("all"))
+                if isinstance(proxies, dict)
+                else proxies
+            )
+            if purl:
+                return ProxyInfo.parse(purl)
+        # 2. a mounted prefix (longest match)
+        mounted = best_mount(self.mounts, url)
+        if mounted:
+            return ProxyInfo.parse(mounted)
+        # 3. the client-level proxy
+        if self.proxy is not None:
+            return self.proxy
+        # 4. the environment (only when trusted)
+        if self.trust_env:
+            parts = urlsplit(url)
+            if parts.scheme in ("http", "https") and not no_proxy_match(parts.hostname or ""):
+                env = env_proxy_for(parts.scheme, parts.hostname or "")
+                if env:
+                    return ProxyInfo.parse(env)
+        return None
+
+    def _resolve_auth(self, auth: Any, url: str) -> AuthBase | Callable[[Headers], Headers] | None:
+        chosen = auth if auth is not None else self.auth
+        resolved = resolve_auth(chosen)
+        if resolved is None and self.trust_env:
+            host = urlsplit(url).hostname
+            if host:
+                creds = netrc_auth(host)
+                if creds:
+                    resolved = resolve_auth(creds)
+        return resolved
 
     # --- public request ---
     def request(
@@ -143,20 +214,16 @@ class Client:
         cookies: Any = None,
         files: Any = None,
         timeout: Any = None,
-        verify: bool | None = None,
+        verify: VerifyType | None = None,
+        cert: Any = _UNSET,
         allow_redirects: bool = True,
         stream: bool = False,
         impersonate: str | None = None,
         proxies: Any = None,
-        auth: tuple[str, str] | None = None,
+        auth: Any = None,
         **_ignored: Any,
     ) -> Response:
         req_headers = self.headers.merged(headers)
-        if auth is not None:
-            import base64
-
-            token = base64.b64encode(f"{auth[0]}:{auth[1]}".encode()).decode()
-            req_headers = req_headers.merged({"Authorization": f"Basic {token}"})
         jar = self.cookies
         if cookies:
             jar = Cookies(jar.to_dict())
@@ -164,61 +231,88 @@ class Client:
 
         tmo = Timeout.from_value(timeout) if timeout is not None else self.timeout
         vfy = self.verify if verify is None else verify
+        crtc = self.cert if cert is _UNSET else cert
 
-        proxy = self.proxy
-        if proxies:
-            purl = proxies.get("https") or proxies.get("http") if isinstance(proxies, dict) else proxies
-            if purl:
-                proxy = ProxyInfo.parse(purl)
-
-        spec = make_request_spec(
-            method,
-            url,
-            params=params,
-            headers=req_headers,
-            cookies=jar,
-            json=json,
-            data=data,
-            files=files,
-            base_url=self.base_url,
-        )
-
+        full_url = build_url(self.base_url, url, params)
+        proxy = self._resolve_proxy(full_url, proxies)
         transport = self._resolve_transport(impersonate)
+        authobj = self._resolve_auth(auth, full_url)
 
-        return self._send_with_redirects(
-            spec, timeout=tmo, verify=vfy, allow_redirects=allow_redirects,
-            stream=stream, transport=transport, proxy=proxy,
+        def _spec_for(hdrs: Headers) -> RequestSpec:
+            return make_request_spec(
+                method, url, params=params, headers=hdrs, cookies=jar,
+                json=json, data=data, files=files, base_url=self.base_url,
+            )
+
+        # non-challenge auth (Basic/Bearer/callable) is applied up front.
+        if authobj is not None and not _needs_challenge(authobj):
+            req_headers = _apply_auth(authobj, req_headers, method.upper(), full_url)
+
+        spec = _spec_for(req_headers)
+        self._fire("request", spec)
+
+        resp = self._send_with_redirects(
+            spec, timeout=tmo, verify=vfy, cert=crtc,
+            allow_redirects=allow_redirects, stream=stream,
+            transport=transport, proxy=proxy,
         )
+
+        # digest-style challenge/response: retry once with the computed header.
+        if authobj is not None and _needs_challenge(authobj) and resp.status_code == 401:
+            challenge = resp.headers.get("www-authenticate")
+            if challenge and challenge.lower().startswith("digest"):
+                resp.close()
+                cast(AuthBase, authobj).set_challenge(challenge)
+                authed = _apply_auth(authobj, req_headers, method.upper(), resp.url or full_url)
+                spec = _spec_for(authed)
+                self._fire("request", spec)
+                resp = self._send_with_redirects(
+                    spec, timeout=tmo, verify=vfy, cert=crtc,
+                    allow_redirects=allow_redirects, stream=stream,
+                    transport=transport, proxy=proxy,
+                )
+
+        self._fire("response", resp)
+        return resp
+
+    def _fire(self, kind: str, arg: Any) -> None:
+        for callback in self.event_hooks.get(kind, ()):
+            callback(arg)
 
     def _send_with_redirects(
-        self, spec: RequestSpec, *, timeout: Timeout, verify: bool,
-        allow_redirects: bool, stream: bool,
+        self, spec: RequestSpec, *, timeout: Timeout, verify: VerifyType,
+        cert: CertType, allow_redirects: bool, stream: bool,
         transport: SyncTransport | None = None,
         proxy: ProxyInfo | None = None,
     ) -> Response:
         transport = transport or self._transport
         proxy = self.proxy if proxy is None else proxy
         redirects = 0
+        history: list[Response] = []
         while True:
             resp = transport.handle(
-                spec, timeout=timeout, verify=verify, proxy=proxy, stream=stream
+                spec, timeout=timeout, verify=verify, cert=cert, proxy=proxy, stream=stream
             )
             self.cookies.update(resp.cookies.to_dict())
 
             if not allow_redirects or resp.status_code not in REDIRECT_STATUSES:
+                resp.history = history
                 return resp
 
             location = resp.headers.get("location")
             if not location:
+                resp.history = history
                 return resp
             if redirects >= self.max_redirects:
                 raise TooManyRedirects(f"Exceeded {self.max_redirects} redirects for {spec.url}")
             redirects += 1
 
+            history.append(resp)
             next_url = urljoin(spec.url, location)
             spec = _follow_redirect(spec, next_url, resp.status_code)
-            if redirects == 1:
-                resp.close()
+            # Redirect hops are buffered+small; free the socket but keep the
+            # recorded response (status/headers/content stay usable) in history.
+            resp.close()
 
     def stream(self, method: str, url: str, **kwargs: Any) -> _StreamContext:
         kwargs.pop("stream", None)
@@ -251,13 +345,31 @@ class Client:
         self.cookies.update(cookies)
 
     def close(self) -> None:
+        for transport in list(self._transport_cache.values()):
+            transport.close()
         self._transport.close()
+        self._transport_cache.clear()
 
     def __enter__(self) -> "Client":
         return self
 
     def __exit__(self, *exc: Any) -> None:
         self.close()
+
+
+def _needs_challenge(auth: Any) -> bool:
+    return isinstance(auth, AuthBase) and auth.requires_challenge
+
+
+def _apply_auth(
+    auth: AuthBase | Callable[[Headers], Headers], headers: Headers, method: str, url: str
+) -> Headers:
+    if isinstance(auth, AuthBase):
+        return auth.apply(headers, method, url)
+    out = auth(headers)
+    if out is None:
+        return headers
+    return out if isinstance(out, Headers) else Headers(out)
 
 
 def _follow_redirect(spec: RequestSpec, next_url: str, status: int) -> RequestSpec:

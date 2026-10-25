@@ -122,7 +122,7 @@ class webpilotai(AISearch):
                     json=payload,
                     stream=True,
                     timeout=self.timeout,
-                    proxies=self.proxies,  # ty:ignore[invalid-argument-type]
+                    proxies=self.proxies,
                 )
                 if not response.ok:
                     raise exceptions.APIConnectionError(
@@ -176,7 +176,7 @@ class webpilotai(AISearch):
                     json=payload,
                     stream=False,
                     timeout=self.timeout,
-                    proxies=self.proxies,  # ty:ignore[invalid-argument-type]
+                    proxies=self.proxies,
                 )
                 if not response.ok:
                     raise exceptions.APIConnectionError(

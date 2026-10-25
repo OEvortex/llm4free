@@ -162,6 +162,7 @@ class Response:
         content: bytes | None = None,
         stream: Iterator[bytes] | None = None,
         request: Any = None,
+        history: Sequence["Response"] | None = None,
     ) -> None:
         self.status_code = status_code
         self.reason = reason
@@ -169,6 +170,7 @@ class Response:
         self.url = url
         self.cookies = cookies if cookies is not None else Cookies()
         self.request = request
+        self.history: list["Response"] = list(history) if history else []
         self._content: bytes | None = content
         self._stream: Iterator[bytes] | None = stream
 
@@ -180,6 +182,23 @@ class Response:
     @property
     def is_redirect(self) -> bool:
         return self.status_code in (301, 302, 303, 307, 308)
+
+    @property
+    def links(self) -> dict[str, dict[str, str]]:
+        """Parse ``Link`` response headers (RFC 5988) into ``{rel: {...}}``.
+
+        Each entry carries ``url`` plus any extension parameters (e.g. ``rel``,
+        ``title``). When several links share a ``rel`` the first wins, matching
+        httpx's ``response.links`` shape.
+        """
+        out: dict[str, dict[str, str]] = {}
+        for raw in self.headers.get_all("link"):
+            for value in _parse_link_header(raw):
+                url = value.pop("url", "")
+                rel = value.get("rel") or url
+                if rel not in out:
+                    out[rel] = {"url": url, **value}
+        return out
 
     def raise_for_status(self) -> "Response":
         if self.status_code >= 400:
@@ -216,9 +235,14 @@ class Response:
         return _json.loads(self.text, **kwargs)
 
     # --- streaming ---
-    def iter_bytes(self, chunk_size: int = 8192) -> Iterator[bytes]:
+    def iter_bytes(self, chunk_size: int | None = 8192) -> Iterator[bytes]:
         if self._content is not None:
             data = self._content
+            if not chunk_size or chunk_size < 0:
+                # ``chunk_size=None`` (curl_cffi/requests) -> yield as available.
+                if data:
+                    yield data
+                return
             for i in range(0, len(data), chunk_size):
                 yield data[i : i + chunk_size]
             return
@@ -239,10 +263,51 @@ class Response:
             if text or keep_blank:
                 yield text
 
-    def iter_lines(self) -> Iterator[str]:
-        return self._iter_split_lines(keep_blank=False)
+    def _iter_raw_lines(self, delimiter: bytes | None = None) -> Iterator[bytes]:
+        """Split the body into ``bytes`` lines, dropping the separator and a
+        trailing ``\\r``. Empty segments are skipped (requests semantics)."""
+        sep = delimiter or b"\n"
+        buf = b""
+        for raw in self.iter_bytes():
+            buf += raw
+            while sep in buf:
+                line, _, buf = buf.partition(sep)
+                if line.endswith(b"\r"):
+                    line = line[:-1]
+                if line:
+                    yield line
+        if buf:
+            if buf.endswith(b"\r"):
+                buf = buf[:-1]
+            if buf:
+                yield buf
 
-    def iter_content(self, chunk_size: int = 8192, decode_unicode: bool = False) -> Iterator[Any]:
+    def iter_lines(
+        self,
+        chunk_size: int | None = None,
+        decode_unicode: bool | None = None,
+        delimiter: Any = None,
+    ) -> Iterator[Any]:
+        """Yield response lines.
+
+        ``requests``/``curl_cffi``-compatible: accepts ``chunk_size``,
+        ``decode_unicode`` and ``delimiter``. With ``decode_unicode=False`` the
+        lines are returned as ``bytes``; with ``True`` (or when the argument is
+        omitted, matching this client's original text-oriented contract) they are
+        decoded ``str``.
+        """
+        as_text = True if decode_unicode is None else bool(decode_unicode)
+        sep = delimiter.encode("utf-8") if isinstance(delimiter, str) else delimiter
+        if as_text:
+            enc = self._encoding()
+            for raw in self._iter_raw_lines(sep):
+                yield raw.decode(enc, errors="replace")
+            return
+        yield from self._iter_raw_lines(sep)
+
+    def iter_content(
+        self, chunk_size: int | None = 8192, decode_unicode: bool = False
+    ) -> Iterator[Any]:
         if decode_unicode:
             enc = self._encoding()
             for raw in self.iter_bytes(chunk_size):
@@ -285,6 +350,47 @@ class Response:
 
     def __repr__(self) -> str:  # pragma: no cover - debug helper
         return f"<Response [{self.status_code}]>"
+
+
+def _split_respecting_quotes(raw: str, delim: str) -> list[str]:
+    """Split on ``delim`` while skipping separators inside ``"..."`` or ``<...>``."""
+    parts: list[str] = []
+    buf: list[str] = []
+    in_str = in_angle = False
+    for ch in raw:
+        if ch == '"':
+            in_str = not in_str
+        elif not in_str:
+            if ch == "<":
+                in_angle = True
+            elif ch == ">":
+                in_angle = False
+        if ch == delim and not in_str and not in_angle:
+            parts.append("".join(buf))
+            buf = []
+        else:
+            buf.append(ch)
+    parts.append("".join(buf))
+    return parts
+
+
+def _parse_link_header(raw: str) -> list[dict[str, str]]:
+    """Parse one RFC 5988 ``Link`` header value into ``{url, **params}`` dicts."""
+    out: list[dict[str, str]] = []
+    for element in _split_respecting_quotes(raw, ","):
+        element = element.strip()
+        if not element:
+            continue
+        segs = _split_respecting_quotes(element, ";")
+        uri = segs[0].strip()
+        url = uri[1:uri.index(">")] if uri.startswith("<") and ">" in uri else uri.strip('"')
+        params: dict[str, str] = {"url": url}
+        for seg in segs[1:]:
+            name, sep, value = seg.partition("=")
+            if sep:
+                params[name.strip().lower()] = value.strip().strip('"')
+        out.append(params)
+    return out
 
 
 # Re-exported lazily for typing; defined in sse.py.

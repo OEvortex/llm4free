@@ -1,11 +1,15 @@
 """Impersonation transport seam.
 
-Plain requests use the stdlib transport (zero dependencies). When ``impersonate``
-is requested, the client asks :func:`get_sync_transport` for a backend. The
-built-in real-fingerprint backend lazily imports ``primp`` — so primp is an
-*optional* extra used solely by the fingerprint-sensitive scraping sites, never
-for ordinary API calls. If it is not installed, a clear configuration error is
-raised (and the selector transparently degrades to the stdlib header engine).
+Plain requests use the stdlib transport (zero dependencies). Two opt-in upgrades
+route through ``primp`` (an *optional* extra, ``llm4free[impersonate]``):
+
+* ``impersonate="chrome124"`` — real browser TLS/JA3 + HTTP/2 fingerprints for
+  the fingerprint-sensitive scraping sites.
+* ``http2=True`` (no impersonation) — plain HTTP/2 without any browser profile.
+
+If ``primp`` is not installed, an impersonation request transparently degrades to
+the stdlib ordered-header engine and an ``http2`` request degrades to HTTP/1.1,
+instead of raising — so the optional dependency is genuinely optional.
 
 This seam is the single integration point for swapping the impersonation engine
 without touching any call site.
@@ -13,6 +17,7 @@ without touching any call site.
 
 from __future__ import annotations
 
+import os
 import re
 import ssl
 from typing import Any, Callable
@@ -21,7 +26,14 @@ from ....exceptions import MissingRequirementsError
 from ..exceptions import ConnectError, HTTPError, ReadError
 from ..exceptions import TimeoutError as HTTPTimeoutError
 from ..models import Headers, Response
-from .base import ProxyInfo, RequestSpec, SyncTransport, Timeout
+from .base import (
+    CertType,
+    ProxyInfo,
+    RequestSpec,
+    SyncTransport,
+    Timeout,
+    VerifyType,
+)
 from .browser_profiles import (
     KNOWN_TARGETS,
     normalize_browser_type,
@@ -37,6 +49,14 @@ def register_sync_backend(name: str, factory: SyncBackendFactory) -> None:
     _registry[name] = factory
 
 
+def _primp_available() -> bool:
+    try:
+        import primp  # noqa: F401
+    except Exception:  # broken/partial native install also lands here
+        return False
+    return True
+
+
 # --- target -> primp name/os mapping --------------------------------------
 
 # primp 2.x ships a narrow set of real fingerprints. Map the curl-style target
@@ -47,7 +67,6 @@ _PRIMP_SUPPORTED: dict[str, tuple[int, ...]] = {
     "firefox": (140, 146),
     "safari": (26,),
 }
-_PRIMP_FAMILY_DEFAULT = 146
 
 _TARGET_RE = re.compile(r"^(chrome|edge|safari|firefox|tor|okhttp|deku)", re.I)
 _MAJOR_RE = re.compile(r"(\d+)")
@@ -89,61 +108,117 @@ def _map_target(target: str) -> tuple[str, str]:
     return f"{family}_{chosen}", os_name
 
 
-class PrimpImpersonationTransport:
-    """Real browser TLS/JA3 + HTTP/2 fingerprinting via ``primp`` (optional dep)."""
+class _PrimpBase:
+    """Shared primp client construction with a per-config persistent cache.
 
-    def __init__(self, impersonate: str) -> None:
+    A ``primp.Client`` wraps a reqwest connection pool, so reusing one across
+    requests (rather than rebuilding it per call) is what actually buys
+    keep-alive. The cache is keyed on everything baked into the client at build
+    time: proxy, TLS verification/CA, timeouts and the fingerprint/http2 flags.
+    """
+
+    _impersonate_name: str | None = None
+    _impersonate_os: str | None = None
+    _http2: bool = False
+
+    def __init__(self) -> None:
         try:
-            import primp  # noqa: F401
+            import primp
         except Exception as ex:  # broken/partial native install also lands here
             raise MissingRequirementsError(
-                "impersonate=%r requires the optional 'primp' backend. "
+                "the primp transport requires the optional 'primp' backend. "
                 "Install it with `pip install llm4free[impersonate]`, or use "
-                "backend='stdlib' for the header-only engine." % impersonate
+                "backend='stdlib' for the header-only engine."
             ) from ex
-        self._impersonate = impersonate
-        self._name, self._os = _map_target(impersonate)
+        self._primp = primp
+        self._clients: dict[tuple, Any] = {}
+
+    def _config_key(
+        self, timeout: Timeout, verify: VerifyType, cert: CertType, proxy: ProxyInfo | None
+    ) -> tuple:
+        return (
+            timeout.connect, timeout.read,
+            _verify_key(verify), _cert_key(cert),
+            _proxy_key(proxy),
+        )
+
+    def _build_client(
+        self, timeout: Timeout, verify: VerifyType, cert: CertType, proxy: ProxyInfo | None
+    ) -> Any:
+        kwargs: dict[str, Any] = {
+            "follow_redirects": False,  # the client layer owns redirects
+            "cookie_store": False,
+            "referer": False,
+        }
+        if self._impersonate_name is not None:
+            kwargs["impersonate"] = self._impersonate_name
+            kwargs["impersonate_os"] = self._impersonate_os
+        if self._http2:
+            kwargs["http2_only"] = True
+
+        # TLS verification / custom CA bundle.
+        if verify is False:
+            kwargs["verify"] = False
+        elif isinstance(verify, (str, os.PathLike)):
+            kwargs["verify"] = True
+            kwargs["ca_cert_file"] = os.fspath(verify)
+        else:
+            kwargs["verify"] = True
+
+        # ``cert`` (mTLS client certificate) is not a primp option; the stdlib
+        # transport handles it. Here it is intentionally ignored.
+        if proxy is not None:
+            kwargs["proxy"] = _proxy_url(proxy)
+        if timeout.connect is not None:
+            kwargs["connect_timeout"] = timeout.connect
+        if timeout.read is not None:
+            kwargs["read_timeout"] = timeout.read
+        return self._primp.Client(**kwargs)
+
+    def _client_for(
+        self, timeout: Timeout, verify: VerifyType, cert: CertType, proxy: ProxyInfo | None
+    ) -> Any:
+        key = self._config_key(timeout, verify, cert, proxy)
+        client = self._clients.get(key)
+        if client is None:
+            client = self._build_client(timeout, verify, cert, proxy)
+            self._clients[key] = client
+        return client
+
+    def _headers_for(self, headers: Headers) -> dict[str, str]:
+        impersonating = self._impersonate_name is not None
+        out: dict[str, str] = {}
+        for name, value in headers.items():
+            low = name.lower()
+            if low in _FORBIDDEN:
+                continue  # reqwest/primp owns these; passing them is an error
+            if impersonating and _SYNTHETIC.get(low) == value:
+                continue  # let primp supply the real browser value
+            out[name] = value
+        return out
 
     def handle(
         self,
         request: RequestSpec,
         *,
         timeout: Timeout,
-        verify: bool | ssl.SSLContext,
+        verify: VerifyType,
+        cert: CertType = None,
         proxy: ProxyInfo | None,
         stream: bool,
     ) -> Response:
-        import primp
-
-        client_kwargs: dict[str, Any] = {
-            "impersonate": self._name,
-            "impersonate_os": self._os,
-            "follow_redirects": False,  # the client layer owns redirects
-            "verify": bool(verify),
-            "cookie_store": False,
-            "referer": False,
-        }
-        if proxy is not None:
-            client_kwargs["proxy"] = _proxy_url(proxy)
-        if timeout.connect is not None:
-            client_kwargs["connect_timeout"] = timeout.connect
-        if timeout.read is not None:
-            client_kwargs["read_timeout"] = timeout.read
-
-        headers = _browser_headers(request.headers)
-        if headers:
-            client_kwargs["headers"] = headers
-
-        client = primp.Client(**client_kwargs)
-
-        body = _body_bytes(request.body)
+        client = self._client_for(timeout, verify, cert, proxy)
+        headers = self._headers_for(request.headers)
         call_kwargs: dict[str, Any] = {
             "method": request.method,
             "url": request.url,
-            "content": body,
+            "content": _body_bytes(request.body),
             "stream": stream,
         }
+        if headers:
+            call_kwargs["headers"] = headers
 
+        primp = self._primp
         try:
             resp = client.request(**call_kwargs)
         except primp.TimeoutError as ex:
@@ -156,7 +231,24 @@ class PrimpImpersonationTransport:
         return _adapt(resp, request.url, stream)
 
     def close(self) -> None:
-        return None
+        self._clients.clear()
+
+
+class PrimpImpersonationTransport(_PrimpBase):
+    """Real browser TLS/JA3 + HTTP/2 fingerprinting via ``primp`` (optional dep)."""
+
+    def __init__(self, impersonate: str) -> None:
+        super().__init__()
+        self._impersonate = impersonate
+        self._impersonate_name, self._impersonate_os = _map_target(impersonate)
+
+
+class PrimpPlainTransport(_PrimpBase):
+    """Plain HTTP/2 via ``primp`` with no browser fingerprint."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._http2 = True
 
 
 class StdImpersonationTransport:
@@ -176,7 +268,8 @@ class StdImpersonationTransport:
         request: RequestSpec,
         *,
         timeout: Timeout,
-        verify: bool | ssl.SSLContext,
+        verify: VerifyType,
+        cert: CertType = None,
         proxy: ProxyInfo | None,
         stream: bool,
     ) -> Response:
@@ -187,30 +280,25 @@ class StdImpersonationTransport:
             method=request.method, url=request.url, headers=headers, body=request.body
         )
         return self._inner.handle(
-            spec, timeout=timeout, verify=verify, proxy=proxy, stream=stream
+            spec, timeout=timeout, verify=verify, cert=cert, proxy=proxy, stream=stream
         )
 
     def close(self) -> None:
-        return None
+        self._inner.close()
 
 
 # Synthetic values the plain client stamps on every request. primp supplies the
 # real browser versions, so drop these before handing headers to the backend.
 _SYNTHETIC: dict[str, str] = {
     "user-agent": "llm4free-http/1.0 (+stdlib)",
-    "connection": "close",
+    "connection": "keep-alive",
     "accept-encoding": "gzip, deflate",
     "accept": "*/*",
 }
 
-
-def _browser_headers(headers: Headers) -> dict[str, str]:
-    out: dict[str, str] = {}
-    for name, value in headers.items():
-        if _SYNTHETIC.get(name.lower()) == value:
-            continue
-        out[name] = value
-    return out
+# Framing/authority headers reqwest computes itself; sending them raises
+# "malformed headers". Always stripped before handing headers to primp.
+_FORBIDDEN = frozenset({"connection", "host", "content-length", "transfer-encoding"})
 
 
 def _body_bytes(body: Any) -> Any:
@@ -219,6 +307,28 @@ def _body_bytes(body: Any) -> Any:
     if isinstance(body, (bytes, bytearray)):
         return bytes(body)
     return b"".join(body)
+
+
+def _proxy_key(proxy: ProxyInfo | None) -> tuple | None:
+    if proxy is None:
+        return None
+    return (proxy.scheme, proxy.host, proxy.port, proxy.username)
+
+
+def _verify_key(verify: VerifyType) -> tuple:
+    if isinstance(verify, ssl.SSLContext):
+        return ("ctx", id(verify))
+    if isinstance(verify, (str, os.PathLike)):
+        return ("path", os.fspath(verify))
+    return ("bool", bool(verify))
+
+
+def _cert_key(cert: CertType) -> Any:
+    if cert is None:
+        return None
+    if isinstance(cert, (str, os.PathLike)):
+        return os.fspath(cert)
+    return tuple(os.fspath(x) if isinstance(x, (str, os.PathLike)) else x for x in cert)
 
 
 def _proxy_url(proxy: ProxyInfo) -> str:
@@ -274,18 +384,24 @@ register_sync_backend("primp", _primp_factory)
 register_sync_backend("stdlib", _stdlib_factory)
 
 
-def get_sync_transport(impersonate: str | None, *, backend: str = "primp") -> SyncTransport:
-    """Pick the transport for ``impersonate``.
+def get_sync_transport(
+    impersonate: str | None, *, backend: str = "primp", http2: bool = False
+) -> SyncTransport:
+    """Pick the transport for ``impersonate`` / ``http2``.
 
     ``backend`` controls the choice:
 
-    * ``"primp"`` (default) — real TLS/JA3 impersonation when ``primp`` is
-      installed, otherwise a transparent fallback to the stdlib header engine.
-    * ``"stdlib"`` — always the pure-stdlib ordered-header engine.
+    * ``"primp"`` (default) — real TLS/JA3 impersonation (or plain HTTP/2) when
+      ``primp`` is installed; a missing/broken install degrades transparently to
+      the stdlib engine rather than raising.
+    * ``"stdlib"`` — always the pure-stdlib ordered-header engine (HTTP/1.1).
     * any other name — looked up in the backend registry.
     """
     if impersonate is None:
+        if http2 and backend != "stdlib" and _primp_available():
+            return PrimpPlainTransport()
         return SyncStdTransport()
+
     target = normalize_browser_type(impersonate) or impersonate
 
     if backend == "stdlib":
@@ -309,6 +425,7 @@ __all__ = [
     "get_sync_transport",
     "register_sync_backend",
     "PrimpImpersonationTransport",
+    "PrimpPlainTransport",
     "StdImpersonationTransport",
     "KNOWN_TARGETS",
 ]
