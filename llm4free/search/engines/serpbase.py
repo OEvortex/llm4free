@@ -38,7 +38,6 @@ class SerpBase(BaseSearchEngine[TextResult]):
 
     # XPath fields are unused — this engine fetches structured JSON.
     items_xpath = ""
-    elements_xpath: dict[str, str] = {}
 
     def build_payload(
         self,

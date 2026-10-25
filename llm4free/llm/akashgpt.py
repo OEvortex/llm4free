@@ -67,10 +67,6 @@ class Completions(BaseCompletions):
                     try:
                         await session.start()
                         await session.navigate("https://chat.akash.network/")
-                        try:
-                            await session._run("wait", "--load", "networkidle", timeout=30)
-                        except Exception:
-                            pass
                         await session.install_console_capture()
                         payload = {
                             "id": uuid.uuid4().hex,

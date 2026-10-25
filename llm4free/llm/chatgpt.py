@@ -14,7 +14,6 @@ so no request-signing or Turnstile reverse-engineering is required here.
 """
 
 from __future__ import annotations
-from llm4free import LitAgent
 
 import asyncio
 import json
@@ -49,8 +48,6 @@ RED = "\033[91m"
 RESET = "\033[0m"
 
 CHATGPT_BASE_URL = "https://chatgpt.com/"
-# A real Chrome UA is required: Cloudflare rejects the default HeadlessChrome UA.
-CHATGPT_USER_AGENT = LitAgent().random()
 DEFAULT_TIMEOUT = 180
 
 # Console markers emitted by the in-page script.
@@ -67,26 +64,6 @@ _CONSOLE_POLL_JS = (
     "return a.slice(i).join('\\n');"
     "})()"
 )
-
-
-class _ChatGPTSession(CDPSession):
-    """CDP session that launches the browser with a realistic Chrome UA.
-
-    Cloudflare rejects the default ``HeadlessChrome`` user agent, but
-    :class:`~llm4free.browser_requests.cdp.CDPSession` exposes no public
-    override, so the ``--user-agent`` global flag is added to the commands
-    that launch or navigate the browser.
-    """
-
-    _LAUNCH_COMMANDS = frozenset({"open", "navigate", "goto"})
-
-    async def _run(
-        self, *args: str, timeout: int = 120, input_text: Optional[str] = None
-    ) -> str:
-        """Run an agent-browser command, forcing the Chrome UA when launching."""
-        if args and args[0] in self._LAUNCH_COMMANDS:
-            args = (*args, "--user-agent", CHATGPT_USER_AGENT)
-        return await super()._run(*args, timeout=timeout, input_text=input_text)
 
 
 class ChatGPTReversed:
@@ -390,7 +367,7 @@ async def _run_browser(
         output: Queue receiving ``("delta", text)``, ``("error", message)``
             and ``("done", None)`` items.
     """
-    session = _ChatGPTSession(headless=True)
+    session = CDPSession(headless=True)
     try:
         await session.start()
         await session.navigate(CHATGPT_BASE_URL)

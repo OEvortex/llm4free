@@ -289,8 +289,6 @@ class Zenmux(OpenAICompatibleProvider):
                 CurlSession = None
                 curl_available = False
             try:
-                from llm4free.litagent import LitAgent
-
                 agent = LitAgent()
                 fingerprint = agent.generate_fingerprint("chrome")
                 headers.update(

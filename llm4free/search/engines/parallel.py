@@ -295,7 +295,7 @@ class Parallel(BaseSearchEngine[TextResult]):
                 body=body,
             )
 
-        results = [to_text_result(item) for item in raw_results if isinstance(item, Mapping)]  # ty:ignore[invalid-argument-type]
+        results = [to_text_result(item) for item in raw_results if isinstance(item, Mapping)]
         if not results and text:
             results = [TextResult(body=text)]
 

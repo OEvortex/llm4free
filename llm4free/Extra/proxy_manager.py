@@ -41,7 +41,7 @@ from litprinter import ic
 try:  # ``requests`` is an optional dependency of the rest of the project
     from requests.sessions import Session as HttpSession
 except ImportError:  # pragma: no cover - only happens in minimal installs
-    HttpSession = None  # type: ignore
+    HttpSession = None
 
 
 _CLIENT_APP = "URBAN_VPN_BROWSER_EXTENSION"

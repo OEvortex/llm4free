@@ -79,6 +79,7 @@ import asyncio
 import base64
 import concurrent.futures
 import json
+import logging
 import queue
 import threading
 import time
@@ -94,6 +95,8 @@ from typing import (
     Tuple,
     Union,
 )
+
+from litprinter import ic
 
 from llm4free import exceptions
 from llm4free.browser_requests.cdp import CDPSession

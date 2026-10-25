@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Union, cast
 from ..element import NavigableString, Tag
 
 # html5lib is an optional dependency; import lazily at runtime to avoid hard dependency
-html5lib = None
+html5lib: Any = None
 
 
 class HTML5Parser:

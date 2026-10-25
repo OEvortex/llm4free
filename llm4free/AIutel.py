@@ -56,13 +56,6 @@ def timeIt(func: Callable):
             return async_wrapper
     except Exception:
         pass
-    try:
-        import inspect
-
-        if inspect.iscoroutinefunction(func):
-            return async_wrapper
-    except Exception:
-        pass
     return sync_wrapper
 
 

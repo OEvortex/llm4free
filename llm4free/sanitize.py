@@ -5,9 +5,9 @@ including support for byte streams, text streams, JSON parsing, regex filtering,
 marker-based extraction, and customizable output response formatting.
 """
 
-import asyncio
 import codecs
 import functools
+import inspect
 import json
 import re
 import sys
@@ -1421,7 +1421,7 @@ def _sanitize_stream_decorator(
     """
 
     def decorator(func) -> Callable:
-        if asyncio.iscoroutinefunction(func):
+        if inspect.iscoroutinefunction(func):
 
             @functools.wraps(func)
             async def async_wrapper(*args, **kwargs) -> AsyncGenerator[Any, None]:

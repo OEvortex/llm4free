@@ -9,7 +9,7 @@ from typing import Optional, cast
 from rich.console import Console
 
 try:
-    from llm4free.swiftcli import CLI, option, argument
+    from llm4free.swiftcli import CLI, option, argument  # ty:ignore[unresolved-import]
 except Exception:
     class CLI:
         def __init__(self,*a,**k): pass

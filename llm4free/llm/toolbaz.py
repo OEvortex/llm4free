@@ -360,7 +360,7 @@ class Toolbaz(OpenAICompatibleProvider):
                 "nV5kP": self.session.headers.get("user-agent"),
                 "lQ9jX": "en-US",
                 "sD2zR": "431x958",
-                "tY4hL": time.tzname[0] if time.tzname else "UTC",
+                "tY4hL": time.tzname[0] if time.tzname[0] else "UTC",
                 "pL8mC": "Linux armv81",
                 "cQ3vD": datetime.now().year,
                 "hK7jN": datetime.now().hour,

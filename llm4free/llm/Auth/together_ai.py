@@ -393,7 +393,7 @@ if __name__ == "__main__":
         stream=True,
     )
 
-    for chunk in cast(Generator[ChatCompletionChunk, None, None], stream_gen):
+    for chunk in stream_gen:
         if chunk.choices[0].delta and chunk.choices[0].delta.content:
             print(chunk.choices[0].delta.content, end="")
     print()

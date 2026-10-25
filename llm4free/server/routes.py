@@ -181,7 +181,7 @@ class Api:
                     }
                 )
             # Sort models alphabetically by the part after the first '/'
-            models = sorted(models, key=lambda m: m["id"].split("/", 1)[1].lower())
+            models = sorted(models, key=lambda m: str(m["id"]).split("/", 1)[1].lower())
             return {"object": "list", "data": models}
 
         @self.app.get(
@@ -280,7 +280,7 @@ class Api:
                     }
                 )
             # Sort models alphabetically by the part after the first '/'
-            models = sorted(models, key=lambda m: m["id"].split("/", 1)[1].lower())
+            models = sorted(models, key=lambda m: str(m["id"]).split("/", 1)[1].lower())
             return {"object": "list", "data": models}
 
         @self.app.get(
@@ -579,7 +579,7 @@ class Api:
                         "created_at": int(time.time()),
                     }
                 )
-            models = sorted(models, key=lambda m: m["id"].split("/", 1)[1].lower())
+            models = sorted(models, key=lambda m: str(m["id"]).split("/", 1)[1].lower())
             return {"data": models}
 
     def _register_image_routes(self):
@@ -711,7 +711,7 @@ class Api:
                     }
                 )
             # Sort models alphabetically by the part after the first '/'
-            models = sorted(models, key=lambda m: m["id"].split("/", 1)[1].lower())
+            models = sorted(models, key=lambda m: str(m["id"]).split("/", 1)[1].lower())
             return {"object": "list", "data": models}
 
         @self.app.get(
