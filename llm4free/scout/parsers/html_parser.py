@@ -2,7 +2,6 @@
 Scout HTML Parser - Advanced HTML Parsing with Python's Built-in Parser
 """
 
-import html
 import html.entities as html_entities
 import re
 from html.parser import HTMLParser as StdHTMLParser
@@ -60,8 +59,9 @@ class HTMLParser:
         Returns:
             str: Preprocessed HTML markup
         """
-        # Decode HTML entities
-        markup = html.unescape(markup)
+        # Do not globally html.unescape here: it turns &quot; inside attribute
+        # values (e.g. JSON payloads) into raw quotes and breaks tokenization.
+        # HTMLParser already unescapes entities in attributes and text.
 
         # Handle unclosed tags (basic approach)
         markup = re.sub(

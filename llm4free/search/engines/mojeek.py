@@ -3,10 +3,18 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, Optional
+from typing import Any, cast
 
+from ...exceptions import RatelimitE
 from ..base import BaseSearchEngine
 from ..results import TextResult
+
+_CAPTCHA_MARKERS = (
+    "<title>captcha</title>",
+    "altcha",
+    "captcha-wrap",
+    "challenge.js",
+)
 
 
 class Mojeek(BaseSearchEngine[TextResult]):
@@ -25,6 +33,32 @@ class Mojeek(BaseSearchEngine[TextResult]):
         "href": ".//h2/a/@href",
         "body": ".//p[@class='s']//text()",
     }
+
+    def request(self, method: str, url: str, **kwargs: Any) -> str | None:
+        """Fetch Mojeek results, surfacing its anti-bot challenge.
+
+        The base implementation swallows request errors, which made blocked
+        searches look like empty result sets. Mojeek answers automated
+        traffic with a 403 or an ALTCHA challenge page, so both are reported
+        explicitly instead.
+        """
+        try:
+            response = self.http_client.request(cast(Any, method), url, **kwargs)
+        except RatelimitE as ex:
+            raise RatelimitE(
+                "Mojeek blocked this request (403/429). Automated searches require "
+                "a browser session; the engine returned no usable results."
+            ) from ex
+
+        html_text = response.text
+        lowered = html_text.lower()
+        if any(marker in lowered for marker in _CAPTCHA_MARKERS):
+            raise RatelimitE(
+                "Mojeek returned an ALTCHA/CAPTCHA challenge instead of results. "
+                "Automated searches are being throttled; retry later or use "
+                "a proxy/browser session."
+            )
+        return html_text
 
     def build_payload(
         self,
@@ -53,10 +87,13 @@ class Mojeek(BaseSearchEngine[TextResult]):
 
         Returns:
             List of TextResult objects.
+
+        Raises:
+            RatelimitE: Mojeek responded with an anti-bot challenge.
         """
         keywords = args[0] if args else kwargs.get("keywords")
-        if keywords is None:
-            keywords = ""
+        if not keywords:
+            raise ValueError("Keywords are mandatory")
         region = args[1] if len(args) > 1 else kwargs.get("region", "us-en")
         safesearch = args[2] if len(args) > 2 else kwargs.get("safesearch", "moderate")
         max_results = args[3] if len(args) > 3 else kwargs.get("max_results")

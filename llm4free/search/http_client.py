@@ -131,6 +131,8 @@ class HttpClient:
             else:
                 raise LLM4FreeE(f"{resp.url} returned {resp.status_code}")
 
+        except LLM4FreeE:
+            raise
         except Exception as ex:
             if "time" in str(ex).lower() or "timeout" in str(ex).lower():
                 raise TimeoutE(f"{url} {type(ex).__name__}: {ex}") from ex
