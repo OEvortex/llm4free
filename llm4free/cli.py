@@ -15,6 +15,7 @@ from .search import (
     Mojeek,
     Parallel,
     SerpBase,
+    Serply,
     Wikipedia,
     YahooSearch,
 )
@@ -33,6 +34,7 @@ ENGINES: Dict[str, Union[Type[BaseSearch], Type[BaseSearchEngine]]] = {
     "parallel": Parallel,
     "wikipedia": Wikipedia,
     "serpbase": SerpBase,
+    "serply": Serply,
 }
 
 
