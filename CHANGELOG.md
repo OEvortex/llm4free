@@ -2,6 +2,40 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2026.10.25] - 2026-10-25
+
+### ✨ Added
+- **Unified search client** — `llm4free.search.client.Search` and `SearchResponse` expose an OpenAI-style surface for every engine: `client.search.create(query=..., engine="auto", category="text", max_results=5)` with engine aliases, capability routing, automatic failover, auth-aware skipping, `exclude_search`, and per-category shortcuts (`text`, `images`, `news`, `videos`, `suggestions`, `answers`, `maps`, `weather`, `translate`, `books`). Added `Client.get_search_providers()`, expanded `docs/search.md` / `docs/client.md`, and a runnable `examples/search.py`.
+- **AskMeAI** — OpenAI-compatible provider for `ask-me-ai.app` with `X-App-Token` request signing, SSE event parsing, and `previousResponseId` context chaining.
+- **RewindAI** — OpenAI-compatible provider for the `rewind.ai` anonymous API (`x-anon-token` bootstrap, live model discovery, JSON/SSE completions).
+- **ChatBotChatApp** — Provider for `chatbotchatapp.com` with cookie/CSRF handshake, MD5-signed payloads, and SSE streaming.
+- **ChatJimmy** — Lightweight `llama3.1-8B` chat provider.
+- **Serply** — Google results through the Serply REST API, registered in the engine registry and CLI. Requires `SERPLY_API_KEY`.
+- **Browser backends** — `llm4free.browser_requests` now resolves `agent-browser`, `lightpanda`, `chrome`, and `native` engines via `LLM4FREE_BROWSER_ENGINE`; added native CDP/WebSocket clients, a browser process manager, shared stealth init scripts, and an agent-browser stealth plugin.
+- **Examples** — `examples/quickstart.py`, `streaming.py`, `conversation.py`, `images.py`, `text_to_speech.py`, `tool_calling.py`, `content_pipeline.py`, plus an examples index and generated assets.
+- **Tool calling** — Typed `ClientCompletions.create()` overloads for streaming/non-streaming calls and tool-call-aware response validation; added `tests/test_tool_calling.py`.
+
+### 🔄 Changed
+- **Documentation** — Rewrote the README and docs tree around the unified client, provider matrix, search, CLI, API server, and examples.
+- **Packaging** — Relaxed dependency pins, moved `tiktoken` into runtime dependencies, dropped the bundled `openai` dependency and the `parser` extra, and added Python 3.14/3.15 classifiers; `html5lib` is now an optional lazy import.
+- **Providers** — Refreshed model catalogs and request/stream handling across AI4Chat, AkashGPT, ChatGPT, Gemini, GptFree, IBM, K2Think, Miklium, Netwrck, OllamaSwarm, PiAI, Toolbaz, TypliAI, and WiseCat, with LitAgent fingerprints applied consistently.
+- **Search** — Serply wired into the registry; Brave, DuckDuckGo, Parallel, SerpBase, and Yahoo engines aligned with the shared base classes.
+- **Scout** — Crawler/parser cleanups and lazy `html5lib` loading.
+
+### 🐛 Fixed
+- **Bing Images** — Re-reversed the current `a.iusc` cards: metadata is read from the anchor's `m` JSON (`murl`, `turl`, `purl`, `t`/`desc`), yielding real image URLs, source domains, dimensions, and cross-page deduplication.
+- **Bing News** — Re-reversed the current `div.news-card.newsitem` cards: title/URL/author come from `data-title`/`data-url`/`data-author`, dates from `.source span[aria-label]`, and images from `div.image img`; snippet-less (`nosnip`) cards are handled.
+- **Mojeek** — Detects 403/ALTCHA challenge pages and raises `RatelimitE` with a clear message instead of silently returning an empty list.
+- **Scout** — Stopped globally un-escaping markup before parsing, which corrupted `&quot;`-encoded JSON attributes such as Bing image metadata; `HTMLParser` already decodes attributes and text correctly.
+- **HTTP client** — `RatelimitE` / `TimeoutE` raised by the search HTTP client are no longer re-wrapped as generic `LLM4FreeE`.
+- **Client failover** — Tool-call-only completions (`content=None`) are treated as valid responses, and provider/TTI/TTS fallbacks now catch the full error surface instead of a narrow exception list.
+
+### 🗑️ Removed
+- **Providers** — ArtingAI, Bard, E2B, EssentialAI, ExaAI, FreeAI, FreeAIOnline, FreeAssist, FuckICoding, GLM, HeckAI, LLMChat, OperaAria, Supercode, Surfsense, TurboSeek, WriteCream, and the browser-backed `UNFINISHED` package (Cloudflare, DeepInfraFree, Perchance).
+- **Bundled modules** — SwiftCLI (replaced by Rich), ZeroArt, `Extra/gguf.py`, `Extra/weather.py`, `Extra/weather_ascii.py`, `browser_config.py`, and the consolidated `.txt` list.
+- **Legacy tests** — Removed the stale provider/search/server test suite; coverage now centers on `tests/test_tool_calling.py` and `tests/search/test_serply.py`.
+- **Docs** — Removed pages for the deleted modules (`swiftcli.md`, `weather.md`, `zeroart.md`).
+
 ## [2026.9.20] - 2026-09-20
 
 ### ✨ Added
