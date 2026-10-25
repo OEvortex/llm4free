@@ -25,7 +25,7 @@ This hub is organized around the actual modules that live inside the repository,
 | API reference | Structured entry point into the API docs | [docs/api-reference.md](api-reference.md) |
 | Model registry | Enumerate LLM, TTS, and TTI models exposed via `llm4free/models.py` | [docs/models.md](models.md) |
 | OpenAI-compatible API server | Deploy FastAPI server that proxies any LLM4Free provider | [docs/openai-api-server.md](openai-api-server.md) |
-| Search stack | DuckDuckGo/Bing/Yahoo/Brave/Mojeek/Wikipedia/SerpBase/Parallel engines + CLI usage | [docs/search.md](search.md) |
+| Search stack | OpenAI-style `client.search` plus DuckDuckGo/Bing/Yahoo/Brave/Mojeek/Wikipedia/SerpBase/Parallel engines and CLI usage | [docs/search.md](search.md) |
 | HTML parser & crawler | Deep dive into `llm4free/scout` | [docs/scout.md](scout.md) |
 | Stream sanitizers | Advanced SSE/HTTP stream processing utilities | [docs/sanitize.md](sanitize.md) |
 | Decorators & utilities | Retry/timing helpers from `llm4free/AIutel.py` | [docs/decorators.md](decorators.md) |

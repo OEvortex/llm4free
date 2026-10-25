@@ -57,6 +57,9 @@ __all__ = [
     # Base classes
     "BaseSearch",
     "BaseSearchEngine",
+    # Unified client
+    "Search",
+    "SearchResponse",
     # Main search interfaces
     "BraveSearch",
     "DuckDuckGoSearch",
@@ -78,3 +81,6 @@ __all__ = [
     "NewsResult",
     "BooksResult",
 ]
+
+# Imported last: the client depends on the registry defined above.
+from .client import Search, SearchResponse  # noqa: E402

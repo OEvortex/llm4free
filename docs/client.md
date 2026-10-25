@@ -1,9 +1,9 @@
 # LLM4Free Python Client (`llm4free/client.py`)
 
-> **Last updated:** 2026-07-16
+> **Last updated:** 2026-10-25
 > **Maintained by:** OEvortex
 
-`llm4free.client.Client` is the unified Python entry point for LLM4Free providers. It exposes an OpenAI-style surface for chat completions, image generation, and audio speech synthesis while handling dynamic provider discovery, intelligent model resolution, automatic failover, and per-process provider instance caching.
+`llm4free.client.Client` is the unified Python entry point for LLM4Free providers. It exposes an OpenAI-style surface for chat completions, image generation, audio speech synthesis, and multi-engine search while handling dynamic provider discovery, intelligent model resolution, automatic failover, and per-process provider instance caching.
 
 > [!TIP]
 > **Start here.** The unified `Client` is the recommended way to use LLM4Free. Set `model="auto"` and the client picks any working provider/model and automatically fails over if one is down — no need to import individual provider classes. This is the smartest, lowest-friction path and the main differentiator versus libraries that require you to pick a provider by hand.
@@ -17,6 +17,7 @@
 - [Chat Completions](#chat-completions)
 - [Image Generation](#image-generation)
 - [Audio Speech Synthesis](#audio-speech-synthesis)
+- [Search](#search)
 - [Provider Resolution Engine](#provider-resolution-engine)
 - [Fallback Tiers and Failover](#fallback-tiers-and-failover)
 - [Provider Caching](#provider-caching)
@@ -441,6 +442,49 @@ speech = client.audio.speech
 audio_path = speech.create(input_text="Hello", model="auto")
 print(f"Used provider: {speech.last_provider}")
 ```
+
+---
+
+## Search
+
+`client.search` provides the same OpenAI-style `create()` ergonomics for every registered search engine:
+
+```python
+response = client.search.create(
+    query="best python web scraping library",
+    engine="auto",       # or "duckduckgo", "bing", ...
+    category="text",     # text | images | videos | news | suggestions | answers | maps | weather | translate
+    max_results=5,
+)
+
+print(response.engine)   # "duckduckgo"
+for result in response.data:
+    print(result.title, result.href)
+
+response.to_dict()       # JSON-ready
+```
+
+Auto mode fails over across `duckduckgo`, `bing`, `brave`, `yahoo`, `mojeek`, `wikipedia`, `parallel`, and `serpbase` (skipped unless `SERPBASE_API_KEY` is set). `model=` is accepted as an alias for `engine=`, and `Client(exclude_search=[...])` or `exclude=[...]` per call skips engines.
+
+Category shortcuts are available for convenience:
+
+```python
+client.search.text("fastapi")
+client.search.images("mount everest")
+client.search.news("ai regulation", engine="yahoo")
+client.search.weather("Tokyo", engine="yahoo")
+```
+
+Discover engines and their support:
+
+```python
+client.search.list_engines()
+client.search.list_engines("images")
+client.search.capabilities()
+Client.get_search_providers()
+```
+
+See [search.md](search.md#unified-client-openai-style) for the full parameter list, response fields, and per-engine examples.
 
 ---
 

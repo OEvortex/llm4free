@@ -322,24 +322,45 @@ Available providers: `ElevenLabsSTT`, `CohereSTT`.
 
 ## Web search
 
+`client.search` gives every engine an OpenAI-style entry point:
+
 ```python
-from llm4free import DuckDuckGoSearch, BingSearch, BraveSearch
+from llm4free import Client
+
+client = Client()
+response = client.search.create(
+    query="best practices for API design",
+    engine="auto",       # or "duckduckgo", "bing", "brave", ...
+    max_results=5,
+)
+
+print(response.engine)   # e.g. "duckduckgo"
+for result in response.data:
+    print(result.title, result.href)
+```
+
+Pin an engine, query another category, or serialize the response:
+
+```python
+client.search.create(query="climate change", engine="bing", max_results=5)
+client.search.images("mount everest", max_results=5)
+client.search.news("ai regulation", engine="yahoo")
+client.search.weather("Tokyo", engine="yahoo")
+client.search.text("fastapi").to_dict()
+```
+
+Engines: `duckduckgo`, `bing`, `brave`, `yahoo`, `mojeek`, `wikipedia`, `parallel`, and `serpbase` (requires `SERPBASE_API_KEY`). Auto mode fails over across engines; inspect support with `client.search.list_engines()` and `client.search.capabilities()`.
+
+The engine classes are still available for direct use:
+
+```python
+from llm4free import DuckDuckGoSearch
 
 search = DuckDuckGoSearch()
 results = search.text("best practices for API design", max_results=5)
 
 for result in results:
     print(result["title"], result["href"])
-```
-
-Other engines expose the same result objects:
-
-```python
-bing = BingSearch()
-brave = BraveSearch()
-
-results = bing.text("climate change solutions")
-results = brave.text("machine learning tutorials")
 ```
 
 ## Provider catalog
@@ -403,7 +424,7 @@ All chat providers implement `chat.completions.create(...)`. Auth-required provi
 
 | Module | Classes |
 |---|---|
-| `llm4free.search` | `DuckDuckGoSearch`, `BingSearch`, `BraveSearch`, `YahooSearch` |
+| `llm4free.search` | `DuckDuckGoSearch`, `BingSearch`, `BraveSearch`, `YahooSearch`, `Search`, `SearchResponse` |
 | `llm4free.search.engines` | `Mojeek`, `Parallel`, `SerpBase`, `Wikipedia` |
 
 ## Model registry
@@ -553,6 +574,7 @@ Full CLI reference: [docs/cli.md](docs/cli.md)
 | `exclude` | `list[str]` | Provider names to exclude from chat |
 | `exclude_images` | `list[str]` | Provider names to exclude from images |
 | `exclude_tts` | `list[str]` | Provider names to exclude from speech |
+| `exclude_search` | `list[str]` | Engine ids to exclude from search auto-selection |
 | `print_provider_info` | `bool` | Print the selected provider and model |
 | `drop_auth_providers` | `bool` | Exclude auth-required providers (default `True`) |
 

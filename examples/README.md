@@ -6,6 +6,7 @@ Small, standalone scripts using the OpenAI-style `llm4free` client:
 client.chat.completions.create(...)
 client.images.generate(...)
 client.audio.speech.create(...)
+client.search.create(...)
 ```
 
 ## Setup
@@ -35,6 +36,7 @@ Scripts that generate files write them to `examples/output/`.
 | [`tool_calling.py`](tool_calling.py) | Tool/function calling with a weather tool |
 | [`images.py`](images.py) | Generating and saving images |
 | [`text_to_speech.py`](text_to_speech.py) | Generating and saving speech audio |
+| [`search.py`](search.py) | Unified OpenAI-style search across every engine |
 | [`content_pipeline.py`](content_pipeline.py) | Chaining article, cover image, and narration |
 
 Run any example directly:
@@ -51,3 +53,12 @@ uv run python examples/tool_calling.py
 - `provider=SomeProviderClass` pins a provider class for one request.
 - `print_provider_info=True` is a `Client(...)` constructor argument that reports the provider and model used for each call.
 - The client automatically falls back to other providers when a request fails.
+
+## Search selection
+
+- `client.search.create(query=..., engine="auto")` tries engines in order and fails over on errors.
+- `engine="duckduckgo"` (or `ddg`, `bing`, `brave`, `yahoo`, `mojeek`, `wikipedia`, `parallel`, `serpbase`) pins a backend.
+- `model="bing"` works as an OpenAI-style alias for `engine=`.
+- `category=` selects `text`, `images`, `videos`, `news`, `suggestions`, `answers`, `maps`, `weather`, or `translate`.
+- `client.search.list_engines()` and `client.search.capabilities()` show what each engine supports.
+- `Client(exclude_search=[...])` or `exclude=[...]` on a call skips engines in auto mode.

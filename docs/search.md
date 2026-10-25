@@ -1,6 +1,6 @@
 # LLM4Free Search Module
 
-> Last updated: 2026-09-24
+> Last updated: 2026-10-25
 > Audience: Developers integrating web search into Python applications
 
 LLM4Free's search module provides unified access to multiple search engines through a consistent Python API and CLI. Text, image, video, and news results are typed dataclasses that support both attribute and dict-style access; instant answers, suggestions, maps, and translations return plain dictionaries.
@@ -16,6 +16,7 @@ LLM4Free's search module provides unified access to multiple search engines thro
 ## Table of Contents
 
 - [Quick Start](#quick-start)
+- [Unified Client (OpenAI-style)](#unified-client-openai-style)
 - [Engine Capabilities](#engine-capabilities)
 - [Imports](#imports)
 - [Result Types](#result-types)
@@ -49,6 +50,102 @@ for r in results:
 
 > [!NOTE]
 > Dataclass results support both attribute access (`result.title`) and dict-style access (`result['title']`). On `TextResult`, the aliases `link` and `url` both map to `href`, and `snippet` maps to `body`.
+
+---
+
+## Unified Client (OpenAI-style)
+
+`Client.search` wraps every registered engine behind a single `create()` call with an OpenAI-SDK shape:
+
+```python
+from llm4free import Client
+
+client = Client()
+response = client.search.create(
+    query="best python web scraping library",
+    engine="auto",          # or "duckduckgo", "bing", ...
+    category="text",        # text | images | videos | news | suggestions | answers | maps | weather | translate
+    max_results=10,
+    region="us-en",
+    safesearch="moderate",
+)
+
+print(response.engine)        # "duckduckgo"
+print(response.engine_class)  # "DuckDuckGoSearch"
+print(response.provider)      # "duckduckgo"
+for result in response.data:
+    print(result.title, result.href)
+
+response.to_dict()            # JSON-ready dictionary
+```
+
+### Engine selection
+
+| Argument | Behavior |
+|---|---|
+| `engine="auto"` (default) | Tries engines in order (`duckduckgo`, `bing`, `brave`, `yahoo`, `mojeek`, `wikipedia`, `parallel`, `serpbase`) and fails over on errors. |
+| `engine="bing"` | Pins one engine. Aliases: `ddg`, `wiki`, `serp`. |
+| `model="bing"` | OpenAI-style alias for `engine=`. |
+| `exclude=["bing"]` | Skips engines for that call. |
+| `Client(exclude_search=[...])` | Skips engines for every call. |
+
+Auto mode skips `serpbase` unless `SERPBASE_API_KEY` is set. Explicitly selecting an engine that does not support the category raises `ValueError`.
+
+### Discovery
+
+```python
+client.search.list_engines()            # ['duckduckgo', 'bing', ...]
+client.search.list_engines("images")    # engines supporting images
+client.search.capabilities()            # {category: [engine ids]}
+Client.get_search_providers()           # static shortcut
+```
+
+### Category shortcuts
+
+```python
+client.search.text("fastapi")
+client.search.images("mount everest", max_results=5)
+client.search.videos("python tutorial")
+client.search.news("ai regulation", engine="yahoo")
+client.search.suggestions("fast ap")
+client.search.answers("population of japan")
+client.search.maps("coffee shops", latitude="35.68", longitude="139.76")
+client.search.weather("Tokyo", engine="yahoo")
+client.search.translate("bonjour", from_lang="fr", to_lang="en")
+```
+
+### Response object
+
+| Attribute | Description |
+|---|---|
+| `query` | Query that was sent |
+| `category` | Requested category |
+| `engine` | Engine id that served the request |
+| `engine_class` | Registered class name |
+| `provider` | Upstream source reported by the engine |
+| `results` / `data` | Result objects |
+| `page` | Requested page |
+| `to_dict()` | JSON-ready dictionary |
+
+Responses are iterable, indexable, and sized (`len(response)`).
+
+### Per-engine examples
+
+```python
+client.search.create(query="python", engine="duckduckgo")
+client.search.create(query="python", engine="bing")
+client.search.create(query="python", engine="brave")
+client.search.create(query="python", engine="yahoo")
+client.search.create(query="python", engine="mojeek")
+client.search.create(query="python", engine="wikipedia", region="en-us")
+client.search.create(query="python", objective="latest release", engine="parallel")
+client.search.create(query="python", engine="serpbase")  # SERPBASE_API_KEY
+```
+
+Common arguments (`region`, `safesearch`, `timelimit`, `page`, `max_results`) are filtered to the parameters each engine actually accepts, so passing them broadly is safe.
+
+> [!NOTE]
+> `proxy=` and `timeout=` on `Client.search` apply to the low-level engines (`Mojeek`, `Wikipedia`, `SerpBase`, `Parallel`). The legacy facades (`DuckDuckGoSearch`, `BingSearch`, `BraveSearch`, `YahooSearch`) manage their own sessions.
 
 ---
 
@@ -776,6 +873,17 @@ results = engine.run("test query", max_results=5)
 ---
 
 ## API Reference
+
+### Search (`client.search`)
+
+| Method | Signature | Returns |
+| ------ | --------- | ------- |
+| `create` | `(query, *, engine="auto", category="text", max_results=10, region=None, safesearch=None, timelimit=None, page=1, exclude=None, **kwargs)` | `SearchResponse` |
+| `text` / `images` / `videos` / `news` / `suggestions` / `answers` / `maps` / `weather` / `translate` / `books` | `(query, **kwargs)` | `SearchResponse` |
+| `list_engines` | `(category=None)` | `List[str]` |
+| `capabilities` | `()` | `Dict[str, List[str]]` |
+
+`SearchResponse` exposes `query`, `category`, `engine`, `engine_class`, `provider`, `results`/`data`, and `page`; `to_dict()` returns a JSON-ready dictionary.
 
 ### DuckDuckGoSearch
 

@@ -43,6 +43,7 @@ from llm4free.llm.utils import (
     ChatCompletion,
     ChatCompletionChunk,
 )
+from llm4free.search.client import Search
 from llm4free.TTI.base import BaseImages, TTICompatibleProvider
 from llm4free.TTI.utils import ImageResponse
 from llm4free.TTS.base import BaseTTSProvider
@@ -1341,6 +1342,7 @@ class Client:
         chat: ClientChat instance for chat completions.
         images: ClientImages instance for image generation.
         audio: ClientAudio instance for speech generation.
+        search: Search instance for web/image/news/etc. search.
 
     Examples:
         >>> # Basic usage with automatic provider selection
@@ -1368,6 +1370,14 @@ class Client:
         ...     exclude=["BadProvider"],
         ...     exclude_images=["SlowProvider"]
         ... )
+
+        >>> # Multi-engine search (OpenAI-style)
+        >>> search = client.search.create(
+        ...     query="python web scraping",
+        ...     engine="auto",
+        ...     max_results=5,
+        ... )
+        >>> print(search.engine, len(search.data))
     """
 
     def __init__(
@@ -1379,6 +1389,7 @@ class Client:
         exclude: Optional[List[str]] = None,
         exclude_images: Optional[List[str]] = None,
         exclude_tts: Optional[List[str]] = None,
+        exclude_search: Optional[List[str]] = None,
         print_provider_info: bool = False,
         drop_auth_providers: bool = True,
         **kwargs: Any,
@@ -1401,6 +1412,8 @@ class Client:
                            Names are case-insensitive. Optional.
             exclude_tts: List of provider names to exclude from audio generation selection.
                          Names are case-insensitive. Optional.
+            exclude_search: List of search engine ids to skip during auto selection.
+                            Names are case-insensitive. Optional.
             print_provider_info: If True, prints selected provider name and model to stdout
                                 before each request. Useful for debugging. Default is False.
             drop_auth_providers: When True (default), providers that require authentication
@@ -1436,6 +1449,7 @@ class Client:
         self.exclude = exclude or []
         self.exclude_images = exclude_images or []
         self.exclude_tts = exclude_tts or []
+        self.exclude_search = exclude_search or []
         self.print_provider_info = print_provider_info
         self.drop_auth_providers = drop_auth_providers
         self.kwargs = kwargs
@@ -1444,6 +1458,14 @@ class Client:
         self.chat = ClientChat(self)
         self.images = ClientImages(self)
         self.audio = ClientAudio(self)
+        search_proxy = None
+        if self.proxies:
+            search_proxy = self.proxies.get("https") or self.proxies.get("http")
+        self.search = Search(
+            proxy=search_proxy,
+            exclude=self.exclude_search,
+            print_provider_info=print_provider_info,
+        )
 
     @staticmethod
     def get_chat_providers() -> List[str]:
@@ -1486,6 +1508,20 @@ class Client:
             8
         """
         return list(TTI_PROVIDERS.keys())
+
+    @staticmethod
+    def get_search_providers() -> List[str]:
+        """
+        Returns every registered search engine id.
+
+        Returns:
+            List of engine ids accepted by ``client.search.create(engine=...)``.
+
+        Examples:
+            >>> Client.get_search_providers()
+            ['duckduckgo', 'bing', 'brave', 'yahoo', 'mojeek', 'wikipedia', 'parallel', 'serpbase']
+        """
+        return Search().list_engines()
 
     @staticmethod
     def get_free_chat_providers() -> List[str]:
