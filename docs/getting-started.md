@@ -261,12 +261,13 @@ pip install -U llm4free
 uv add llm4free
 ```
 
-### `curl_cffi` or other optional dependency missing
+### Optional dependency missing (e.g. `primp`)
 
-Install the relevant extra or the full set:
+The built-in HTTP client needs no extra packages for normal use. Only browser
+TLS/JA3 impersonation (`impersonate=`/`http2=`) needs the optional backend:
 
 ```bash
-pip install -U "llm4free[all]"
+pip install -U "llm4free[impersonate]"   # or the full set: llm4free[all]
 ```
 
 ### A provider returns an error or empty response

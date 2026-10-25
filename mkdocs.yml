@@ -86,6 +86,7 @@ nav:
       - Streaming: examples/streaming-responses.md
   - Development:
       - Architecture: architecture.md
+      - HTTP Client: http.md
       - Contributing: contributing.md
       - Provider Development: provider-development.md
   - Deployment:

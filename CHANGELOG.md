@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 ## [2026.10.25] - 2026-10-25
 
 ### ✨ Added
+- **Built-in HTTP client** — `llm4free.browser_requests._http`, a zero-dependency, httpx-style client (`Client`/`AsyncClient`, module-level `get`/`post`/…) built on the Python standard library. Provides cookie persistence, a keep-alive **connection pool** with safe stale-socket reconnect, streaming and **SSE** parsing, redirects with `response.history`, `response.links`, `event_hooks`, and a `requests`/`curl_cffi.requests`-compatible façade (`compat.Session`/`compat.AsyncSession`) backed by one pooled client.
+- **Auth** — `BasicAuth`, `BearerAuth`, `DigestAuth` (RFC 7616: MD5/SHA-256/SHA-512-256 and `-sess` variants, with automatic `401` challenge retry), plus tuple and callable forms, and a **netrc** fallback.
+- **Proxies & TLS** — HTTP/HTTPS and **SOCKS5** (pure-stdlib CONNECT tunnel + handshake), per-prefix `mount()`, a per-request → mount → client → environment proxy-resolution chain honoring `NO_PROXY`, `verify` as a toggle / CA file / CA dir / prebuilt context, and mTLS **client certificates** (`cert=`).
+- **Optional fingerprinting backend** — real browser **TLS/JA3 + HTTP/2** impersonation via [`primp`](https://pypi.org/project/primp/), installed with the new `llm4free[impersonate]` extra, behind a single transport seam. Non-impersonated `http2=True` also routes through primp. With primp absent, `impersonate=`/`http2=` degrade transparently to a stdlib ordered-header engine.
+- **Documentation** — new `docs/http.md` reference (nav + docs hub), README feature/install updates, and an architecture section for the client.
+
 - **Unified search client** — `llm4free.search.client.Search` and `SearchResponse` expose an OpenAI-style surface for every engine: `client.search.create(query=..., engine="auto", category="text", max_results=5)` with engine aliases, capability routing, automatic failover, auth-aware skipping, `exclude_search`, and per-category shortcuts (`text`, `images`, `news`, `videos`, `suggestions`, `answers`, `maps`, `weather`, `translate`, `books`). Added `Client.get_search_providers()`, expanded `docs/search.md` / `docs/client.md`, and a runnable `examples/search.py`.
 - **AskMeAI** — OpenAI-compatible provider for `ask-me-ai.app` with `X-App-Token` request signing, SSE event parsing, and `previousResponseId` context chaining.
 - **RewindAI** — OpenAI-compatible provider for the `rewind.ai` anonymous API (`x-anon-token` bootstrap, live model discovery, JSON/SSE completions).
@@ -21,6 +27,9 @@ All notable changes to this project will be documented in this file.
 - **Providers** — Refreshed model catalogs and request/stream handling across AI4Chat, AkashGPT, ChatGPT, Gemini, GptFree, IBM, K2Think, Miklium, Netwrck, OllamaSwarm, PiAI, Toolbaz, TypliAI, and WiseCat, with LitAgent fingerprints applied consistently.
 - **Search** — Serply wired into the registry; Brave, DuckDuckGo, Parallel, SerpBase, and Yahoo engines aligned with the shared base classes.
 - **Scout** — Crawler/parser cleanups and lazy `html5lib` loading.
+- **Dependencies** — dropped `curl_cffi`, `requests`, and `httpx`. Providers, the search stack, and the `Scout` crawler now use the built-in client; `primp` is an optional extra used only by fingerprint-sensitive sites.
+- **Scout** — `ScoutCrawler` now defaults to the built-in client session instead of a `curl_cffi` session.
+
 
 ### 🐛 Fixed
 - **Bing Images** — Re-reversed the current `a.iusc` cards: metadata is read from the anchor's `m` JSON (`murl`, `turl`, `purl`, `t`/`desc`), yielding real image URLs, source domains, dimensions, and cross-page deduplication.

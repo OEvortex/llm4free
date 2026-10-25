@@ -173,7 +173,7 @@ scout = Scout(html_content, features='html5lib')  # For compliance
 | `prettify` | `(formatter="minimal")` | Pretty-print the HTML |
 | `remove_tags` | `(tags)` | Remove the given tag names and their contents |
 | `cache` | `(key, value=None)` | Simple per-instance cache for parsed content |
-| `fetch_and_parse` | `(url, session=None, **kwargs)` | Fetch HTML from a URL (uses `curl_cffi` when available) and parse it |
+| `fetch_and_parse` | `(url, session=None, **kwargs)` | Fetch HTML from a URL (via the built-in `_http` client) and parse it |
 
 > [!WARNING]
 > `Scout` does **not** implement `to_markdown()`. Use `to_json()` or `prettify()` to serialize parsed content. The earlier docs that referenced `to_markdown()` were inaccurate.
@@ -316,7 +316,7 @@ soup.prettify()
 
 ## Dependencies
 
-- `curl_cffi` — HTTP library used by `fetch_and_parse` (falls back to `requests` if unavailable)
+- Built-in `llm4free.browser_requests._http` client — HTTP library used by `fetch_and_parse` and `ScoutCrawler` (zero third-party dependencies; optional `llm4free[impersonate]` for browser TLS/JA3)
 - `lxml` — Fast parser (optional, recommended for `features='lxml'`)
 - `html5lib` — Standards-compliant HTML parser (optional)
 - `concurrent.futures` — Asynchronous execution (standard library)

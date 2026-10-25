@@ -82,8 +82,14 @@ flowchart TD
 
 ### Search Stack (`llm4free/search/`)
 
-- Houses protocol-specific engines (see `llm4free/search/engines/*`) plus shared HTTP client and result serializers.
+- Houses protocol-specific engines (see `llm4free/search/engines/*`) plus result serializers. All engines talk to the network through the shared built-in client in `llm4free/browser_requests/_http`.
 - DuckDuckGo/Yep/Bing/Yahoo commands import from here, so adding new CLI options usually starts with an engine update.
+
+### HTTP Client (`llm4free/browser_requests/_http/`)
+
+- A zero-dependency, httpx-style client (`Client`/`AsyncClient`) built on the standard library, with cookie persistence, a keep-alive connection pool, streaming/SSE, proxies (HTTP/SOCKS5), TLS (CA + mTLS), and `Basic`/`Bearer`/`Digest` auth.
+- Browser TLS/JA3 + HTTP/2 fingerprinting is isolated behind a single **transport seam** and provided by the optional `primp` backend (`llm4free[impersonate]`); without it, `impersonate=`/`http2=` degrade gracefully to the stdlib ordered-header engine.
+- `compat.py` offers a `requests`/`curl_cffi.requests`-shaped façade so providers migrate by changing one import line. See [docs/http.md](http.md).
 
 ### Providers (`llm4free/llm/`)
 

@@ -37,7 +37,7 @@ class AwesomePrompts:
             local_path: Where to save prompts locally
             auto_update: Auto update prompts on init
             timeout: Timeout for HTTP requests
-            impersonate: Browser profile for curl_cffi
+            impersonate: Browser profile for the impersonation backend (primp)
             cache_size: LRU cache size for get operations
             max_workers: Max threads for concurrent operations
         """

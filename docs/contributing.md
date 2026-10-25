@@ -276,11 +276,9 @@ Keep imports organized:
 import json
 from typing import Any, Dict, Optional
 
-import requests
-from curl_cffi.requests import Session
-
 from llm4free.AIbase import Provider
 from llm4free import exceptions
+from llm4free.browser_requests._http.compat import Session
 ```
 
 ### Naming Conventions

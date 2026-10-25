@@ -81,7 +81,7 @@ custom_manager = AwesomePrompts(
 | `local_path` | `Optional[str]` | `~/.llm4free/awesome-prompts.json` | Where to save prompts locally |
 | `auto_update` | `bool` | `True` | Auto update prompts on initialization |
 | `timeout` | `int` | `10` | Timeout for HTTP requests in seconds |
-| `impersonate` | `str` | `"chrome110"` | Browser profile for curl_cffi |
+| `impersonate` | `str` | `"chrome110"` | Browser profile for the impersonation backend (`primp`) |
 | `cache_size` | `int` | `128` | LRU cache size for get operations |
 | `max_workers` | `int` | `4` | Maximum threads for concurrent operations |
 

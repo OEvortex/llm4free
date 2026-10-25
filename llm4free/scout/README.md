@@ -72,7 +72,7 @@ for page in crawler.crawl():
 | `base_url` | required | Starting URL |
 | `max_pages` | `50` | Maximum pages to crawl |
 | `tags_to_remove` | `["script", "style"]` | Tags removed before text extraction |
-| `session` | `None` | Custom session (defaults to `curl_cffi` session) |
+| `session` | `None` | Custom session (defaults to the built-in `llm4free.browser_requests._http` session) |
 | `delay` | `0.5` | Minimum seconds between requests |
 | `obey_robots` | `True` | Respect `robots.txt` |
 | `allowed_domains` | base host | Hosts the crawler may visit |
@@ -238,7 +238,7 @@ print(scout.find("title").get_text())
 
 ## 🔧 Dependencies
 
-- `curl_cffi` — required by `ScoutCrawler` for HTTP sessions
+- Built-in `llm4free.browser_requests._http` client — used by `ScoutCrawler` for HTTP sessions (zero third-party dependencies; optionally `llm4free[impersonate]` for browser TLS/JA3)
 - `lxml` — optional, enables `features="lxml"` / `"lxml-xml"`
 - `html5lib` — optional, enables `features="html5lib"`
 

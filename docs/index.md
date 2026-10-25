@@ -136,6 +136,7 @@ print(image.data[0].url)
 ### Development & Reference
 
 - **[Provider Development](provider-development.md)** — Create custom AI providers
+- **[HTTP Client](http.md)** — Built-in zero-dependency, httpx-style client
 - **[Contributing Guide](contributing.md)** — Contribution process and standards
 - **[CLI Reference](cli.md)** — Command-line interface reference
 - **[Decorators](decorators.md)** — Utility decorators for error handling and optimization
@@ -186,6 +187,7 @@ LLM4Free supports **40+ AI providers** plus multiple search engines and media mo
 - Text-to-image and text-to-speech generation
 - OpenAI-compatible API server (FastAPI)
 - `Scout` HTML parser & web crawler with a BeautifulSoup-compatible API
+- Built-in zero-dependency HTTP client (httpx-style), with optional browser TLS impersonation via `llm4free[impersonate]`
 - 100% type-annotated public API
 
 ---

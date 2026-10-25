@@ -71,6 +71,7 @@ See [LEGAL_NOTICE.md](LEGAL_NOTICE.md) for the full terms.
 | Model registry | Enumerate providers, models, and voices programmatically |
 | API server | OpenAI `/v1` routes plus Anthropic `/v1/messages` compatibility |
 | CLI | Rich-powered search, weather, translation, maps, and more |
+| Built-in HTTP client | Zero-dependency, httpx-style client (`llm4free.browser_requests._http`) with optional browser TLS impersonation |
 | Typed public API | Type hints and consistent response objects throughout |
 
 ## How it works
@@ -86,7 +87,9 @@ The result: services that were only usable in a browser become ordinary Python o
 
 - Python **3.10+**
 - No API keys required for free providers
+- No HTTP libraries required for the built-in client — it runs on the standard library
 - Optional: `fastapi` and `uvicorn` for the API server (`[api]` extra)
+- Optional: `primp` for browser TLS/JA3 + HTTP/2 fingerprinting (`[impersonate]` extra)
 
 ## Installation
 
@@ -97,6 +100,9 @@ pip install -U llm4free
 # With the OpenAI-compatible API server
 pip install -U "llm4free[api]"
 
+# With browser TLS/JA3 + HTTP/2 fingerprinting for the built-in HTTP client
+pip install -U "llm4free[impersonate]"
+
 # With development tools
 pip install -U "llm4free[dev]"
 ```
@@ -105,6 +111,7 @@ With [uv](https://github.com/astral-sh/uv) (recommended):
 
 ```bash
 uv add llm4free
+uv add "llm4free[impersonate]"   # optional browser-fingerprinting backend
 uv run llm4free --help
 uv tool install llm4free
 ```
@@ -604,6 +611,7 @@ llm4free/
 ├── STT/               # Speech-to-text providers
 ├── search/            # Search engines and result models
 ├── AISEARCH/          # AI-powered search backends
+├── browser_requests/  # Browser automation + the built-in HTTP client (_http)
 ├── server/            # FastAPI OpenAI/Anthropic-compatible server
 ├── Extra/             # GitAPI, temp-mail, YouTube toolkit, utilities
 ├── scout/             # HTML parser and crawler
@@ -622,6 +630,7 @@ llm4free/
 | [Model Registry](docs/models.md) | Enumerating models and voices |
 | [Tool Calling](docs/tool-calling.md) | Function calling across providers |
 | [Search](docs/search.md) | Multi-engine search API |
+| [HTTP Client](docs/http.md) | Built-in zero-dependency HTTP client and impersonation |
 | [Provider Development](docs/provider-development.md) | Writing custom providers |
 | [Deployment](docs/deployment.md) | Production deployment |
 | [Docker](docs/DOCKER.md) | Images and Compose profiles |

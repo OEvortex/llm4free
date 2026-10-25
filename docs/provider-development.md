@@ -34,7 +34,7 @@ llm4free.llm.base.OpenAICompatibleProvider (ABC, chat.completions.create)
 
 - **Provider** — A class that translates user prompts into API calls
 - **Model** — The actual AI model (e.g., "gpt-4", "llama-3.1-70b")
-- **Session** — HTTP client for API communication (uses `curl_cffi` for reliability)
+- **Session** — HTTP client for API communication (the built-in `llm4free.browser_requests._http` client; `curl_cffi`-compatible via `compat`)
 - **Conversation** — Optional context preservation across turns
 
 ---
@@ -48,7 +48,7 @@ Create `llm4free/llm/your_provider.py`:
 ```python
 from typing import Any, Dict, Generator, Optional, Union
 
-from curl_cffi.requests import Session
+from llm4free.browser_requests._http.compat import Session
 from llm4free.AIbase import Provider, Response
 from llm4free import exceptions
 
