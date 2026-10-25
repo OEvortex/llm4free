@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Mapping
 from typing import Any
 
 from ..base import BaseSearchEngine
@@ -41,7 +42,7 @@ class Serply(BaseSearchEngine[TextResult]):
 
     # XPath fields are unused - this engine fetches structured JSON.
     items_xpath = ""
-    elements_xpath: dict[str, str] = {}
+    elements_xpath: Mapping[str, str] = {}
 
     def build_payload(
         self,
