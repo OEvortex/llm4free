@@ -46,6 +46,7 @@ live in `llm4free.llm.Auth` and are also re-exported from `llm4free.llm`.
 | Netwrck | `Netwrck` | `thedrummer/skyfall-36b-v2`, `inclusionai/ling-3.0-flash` |
 | OllamaSwarm | `OllamaSwarm` | models discovered from public Ollama endpoints |
 | PiAI | `PiAI` | `inflection_3_pi` |
+| RewindAI | `RewindAI` | `qwen/qwen-2.5-7b-instruct`, `qwen/qwen3-coder`, ... |
 | Toolbaz | `Toolbaz` | `toolbaz-v5`, `gpt-5`, `gemini-3.6-flash`, `deepseek-v3` |
 | TypliAI | `TypliAI` | `openai/gpt-4o-mini`, `anthropic/claude-sonnet-5-pro` |
 | WiseCat | `WiseCat` | `chat-model-small` (also accepted as `WiseCat/chat-model-small`) |
