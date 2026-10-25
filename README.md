@@ -38,7 +38,7 @@ LLM4Free is a Python package that collects **reverse-engineered backends for thi
 
 Every backend is adapted to the same response shapes, so you can switch providers by changing one argument. The unified `Client` adds automatic provider selection, model resolution, instance caching, and failover.
 
-- **Chat:** 30 LLM providers, most usable without an API key
+- **Chat:** 31 LLM providers, most usable without an API key
 - **Images:** 13 text-to-image providers
 - **Speech:** 14 text-to-speech and 2 speech-to-text providers
 - **Search:** DuckDuckGo, Bing, Brave, Yahoo, Mojeek, Parallel, SerpBase, Wikipedia
@@ -359,6 +359,7 @@ All chat providers implement `chat.completions.create(...)`. Auth-required provi
 | AkashGPT | `AkashGPT` | — |
 | ChatJimmy | `ChatJimmy` | — |
 | ChatBotChatApp | `ChatBotChatApp` | Multiple hosted models, SSE streaming |
+| AskMeAI | `AskMeAI` | Agentic chat front-end, SSE streaming |
 | K2Think | `K2Think` | — |
 | Miklium | `Miklium` | — |
 | Netwrck | `Netwrck` | — |

@@ -6,6 +6,7 @@
 
 # Base classes and utilities
 from llm4free.llm.ai4chat import AI4Chat
+from llm4free.llm.askmeai import AskMeAI
 from llm4free.llm.chatjimmy import ChatJimmy
 from llm4free.llm.akashgpt import AkashGPT
 from llm4free.llm.Auth import (
@@ -106,6 +107,7 @@ __all__ = [
     "TwoAI",
     "AI4Chat",
     "AkashGPT",
+    "AskMeAI",
     "Cerebras",
     "ChatGPT",
     "ChatGPTReversed",
