@@ -8,7 +8,7 @@ import string
 import tempfile
 from typing import Any, Optional, Union, cast
 
-from curl_cffi import requests as cf_requests
+from llm4free.browser_requests._http import compat as cf_requests
 from litprinter import ic
 
 from llm4free import exceptions

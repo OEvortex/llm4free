@@ -47,8 +47,6 @@ keywords = [
 
 dependencies = [
     "typing_extensions",
-    "curl_cffi",
-    "httpx",
     "tqdm",
     "packaging",
     "nest-asyncio",
@@ -59,7 +57,6 @@ dependencies = [
     "aiohttp",
     "litprinter",
     "pydantic",
-    "requests",
     "lxml",
     "tiktoken",
 ]
@@ -76,6 +73,9 @@ Tracker = "https://github.com/OEvortex/LLM4Free/issues"
 YouTube = "https://youtube.com/@OEvortex"
 
 [project.optional-dependencies]
+impersonate = [
+    "primp",
+]
 dev = [
     "ruff",
     "pytest",
@@ -107,7 +107,7 @@ docs = [
     "mkdocstrings-python",
 ]
 all = [
-    "llm4free[api,models,docs,dev]",
+    "llm4free[api,models,docs,dev,impersonate]",
 ]
 
 [tool.pytest.ini_options]

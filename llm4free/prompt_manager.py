@@ -10,7 +10,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Dict, Optional, Union
 
-from curl_cffi.requests import Session
+from llm4free.browser_requests._http.compat import Session
 from rich.console import Console
 from rich.table import Table
 
@@ -54,7 +54,7 @@ class AwesomePrompts:
         self._max_workers = max_workers
         self.timeout = timeout
         try:
-            self.session = Session(timeout=timeout, impersonate=impersonate)  # ty:ignore[invalid-argument-type]
+            self.session = Session(timeout=timeout, impersonate=impersonate)
         except Exception:
             self.session = Session(timeout=timeout)
         self.local_path.parent.mkdir(parents=True, exist_ok=True)

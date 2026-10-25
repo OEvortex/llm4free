@@ -8,8 +8,8 @@ import tempfile
 import time
 from typing import Optional
 
-from requests import post as requests_post
-from requests import put as requests_put
+from llm4free.browser_requests._http.compat import post as requests_post
+from llm4free.browser_requests._http.compat import put as requests_put
 
 
 def upload_to_catbox(img_bytes: bytes, ext: str, agent, timeout: int) -> Optional[str]:

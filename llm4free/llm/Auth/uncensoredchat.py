@@ -13,7 +13,8 @@ import time
 import uuid
 from typing import Any, Dict, Generator, List, Optional, cast
 
-from curl_cffi import CurlError, requests
+from llm4free.browser_requests._http.exceptions import CurlError
+from llm4free.browser_requests._http import compat as requests
 
 from llm4free.llm.base import (
     BaseChat,

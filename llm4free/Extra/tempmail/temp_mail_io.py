@@ -193,7 +193,7 @@ class TempMailIO(TempMailProvider):
         Args:
             auto_create: Automatically create an email upon initialization
         """
-        from curl_cffi.requests import Session
+        from llm4free.browser_requests._http.compat import Session
 
         self.session = Session()
         self.session.headers.update(

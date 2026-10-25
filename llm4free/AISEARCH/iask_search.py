@@ -4,7 +4,7 @@ import urllib.parse
 from typing import Any, AsyncIterator, Dict, Generator, Literal, Optional, Union, cast
 
 import lxml.html
-from curl_cffi.requests import AsyncSession
+from llm4free.browser_requests._http.compat import AsyncSession
 
 from llm4free import exceptions
 from llm4free.AIbase import AISearch, SearchResponse

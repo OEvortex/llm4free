@@ -1,7 +1,7 @@
 from typing import Any, Dict, Generator, List, Optional, Union, cast
 
-from curl_cffi import requests
-from curl_cffi.requests.exceptions import RequestException
+from llm4free.browser_requests._http import compat as requests
+from llm4free.browser_requests._http.exceptions import RequestException
 
 from llm4free import exceptions
 from llm4free.AIbase import AISearch, SearchResponse

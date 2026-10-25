@@ -2,7 +2,8 @@
 
 Extracts cookies (including HTTP-only cf_clearance, session tokens) from any
 website by launching a real Chromium browser via agent-browser. Supports
-filtering by domain and exporting to curl, requests, httpx, and netscape format.
+filtering by domain and exporting to a curl header, an LLM4Free session/client,
+and Netscape format.
 
 Usage:
     >>> from llm4free.Extra.cookie_harvester import CookieHarvester
@@ -310,36 +311,35 @@ class CookieHarvester:
         *domains: str,
         result: Optional[HarvestResult] = None,
     ):
-        """Build a ``requests.Session`` (or ``curl_cffi`` session) with cookies set.
+        """Build a :class:`llm4free.browser_requests._http.compat.Session` with cookies set.
 
         Returns the session object.
         """
-        from curl_cffi import requests
+        from ..browser_requests._http.compat import Session
 
         r = result or self._last_result
         if not r:
             raise HarvestError("No harvest result available")
         cookies = r.domain_filter(*domains) if domains else r.cookies
 
-        session = requests.Session()
+        session = Session()
         for c in cookies:
-            session.cookies.set(c.name, c.value, domain=c.domain, path=c.path)
+            session.cookies.set(c.name, c.value)
         return session
 
     def to_httpx_client(self, *domains: str, result: Optional[HarvestResult] = None):
-        """Build an ``httpx.Client`` with cookies pre-set."""
-        import httpx
+        """Build an LLM4Free http :class:`Client` with cookies pre-set."""
+        from ..browser_requests._http import Client
 
         r = result or self._last_result
         if not r:
             raise HarvestError("No harvest result available")
         cookies = r.domain_filter(*domains) if domains else r.cookies
 
-        jar = httpx.Cookies()
+        jar: dict[str, str] = {}
         for c in cookies:
-            jar.set(c.name, c.value, domain=c.domain, path=c.path)
-        client = httpx.Client(cookies=jar)
-        return client
+            jar[c.name] = c.value
+        return Client(cookies=jar)
 
     def to_dict(
         self,

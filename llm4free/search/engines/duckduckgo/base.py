@@ -10,7 +10,7 @@ from random import choice
 from time import sleep, time
 from typing import Any, Optional, cast
 
-import curl_cffi.requests
+from llm4free.browser_requests._http import compat as curl_cffi
 
 try:
     from lxml.html import HTMLParser as LHTMLParser

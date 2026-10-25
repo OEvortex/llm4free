@@ -5,7 +5,7 @@ from __future__ import annotations
 from random import choice
 from typing import Any, Literal, Optional, cast
 
-import curl_cffi.requests
+from llm4free.browser_requests._http import compat as curl_cffi
 
 from ..exceptions import LLM4FreeE, RatelimitE, TimeoutE
 

@@ -26,8 +26,8 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Dict, Generator, List, Optional, Tuple, Union
 
-import requests
-from requests import RequestException
+from llm4free.browser_requests._http import compat as requests
+from llm4free.browser_requests._http.exceptions import RequestException
 
 from llm4free.llm.base import (
     BaseChat,

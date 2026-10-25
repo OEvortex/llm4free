@@ -2,7 +2,8 @@ import base64
 import time
 from typing import Any, Optional
 
-from curl_cffi import CurlError, requests
+from llm4free.browser_requests._http.exceptions import CurlError
+from llm4free.browser_requests._http import compat as requests
 
 from llm4free.AIbase import SimpleModelList
 from llm4free.litagent import LitAgent

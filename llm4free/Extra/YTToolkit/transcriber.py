@@ -14,7 +14,7 @@ from functools import lru_cache
 from typing import Dict, List, Optional, Union
 from xml.etree import ElementTree
 
-from curl_cffi.requests import Session
+from llm4free.browser_requests._http.compat import Session
 
 from llm4free.exceptions import (
     CookiePathInvalidError,

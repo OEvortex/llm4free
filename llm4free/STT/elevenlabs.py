@@ -8,7 +8,7 @@ speech-to-text transcription service.
 from pathlib import Path
 from typing import Any, BinaryIO, Generator, List, Optional, Union, cast
 
-from curl_cffi import requests
+from llm4free.browser_requests._http import compat as requests
 
 from llm4free import exceptions
 from llm4free.litagent import LitAgent

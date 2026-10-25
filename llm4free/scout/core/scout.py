@@ -775,13 +775,13 @@ class Scout:
     def fetch_and_parse(self, url: str, session=None, **kwargs) -> "Scout":
         """Fetch HTML from a URL and parse it with Scout. Prefers curl_cffi."""
         try:
-            from curl_cffi import requests as curleq
+            from llm4free.browser_requests._http import compat as curleq
 
             s = session or curleq.Session()
             resp = s.get(url, **kwargs)
             return Scout(resp.content, features=self.features)
         except ImportError:
-            import requests
+            from llm4free.browser_requests._http import compat as requests
 
             s = session or requests.Session()
             resp = s.get(url, **kwargs)

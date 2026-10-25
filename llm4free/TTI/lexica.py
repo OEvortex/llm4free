@@ -2,8 +2,9 @@ import base64
 import re
 from typing import Any, List, Optional
 
-from curl_cffi import CurlError, requests
-from curl_cffi.requests import utils as curl_utils
+from llm4free.browser_requests._http.exceptions import CurlError
+from llm4free.browser_requests._http import compat as requests
+from urllib.parse import quote as curl_utils
 
 from llm4free.AIbase import SimpleModelList
 from llm4free.litagent import LitAgent

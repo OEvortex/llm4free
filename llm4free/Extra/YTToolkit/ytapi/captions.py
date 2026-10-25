@@ -7,7 +7,7 @@ import re
 from llm4free import LitAgent
 from typing import Any, Dict, List, Optional
 
-from curl_cffi.requests import Session
+from llm4free.browser_requests._http.compat import Session
 
 # Use the existing robust YTTranscriber
 from llm4free.Extra.YTToolkit.transcriber import TranscriptListFetcher, YTTranscriber

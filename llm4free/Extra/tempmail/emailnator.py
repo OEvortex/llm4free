@@ -7,7 +7,7 @@ from json import loads
 from time import sleep
 from typing import Dict, List, Optional
 
-from requests import Session
+from llm4free.browser_requests._http.compat import Session
 
 from llm4free.litagent import LitAgent
 

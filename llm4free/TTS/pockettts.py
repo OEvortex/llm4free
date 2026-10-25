@@ -17,7 +17,7 @@ import io
 import tempfile
 from typing import Any, Optional, cast
 
-from curl_cffi import requests
+from llm4free.browser_requests._http import compat as requests
 from litprinter import ic
 
 from llm4free import exceptions

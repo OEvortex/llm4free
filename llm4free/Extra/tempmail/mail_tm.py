@@ -7,7 +7,7 @@ import json
 import random
 from typing import Dict, List, Optional, Tuple
 
-from curl_cffi.requests import Session
+from llm4free.browser_requests._http.compat import Session
 
 from ...scout import Scout
 from .base import (

@@ -10,7 +10,7 @@ import uuid
 from typing import Any, Dict, Generator, List, Optional, Union, cast
 from urllib.parse import unquote
 
-from curl_cffi.requests import Session
+from llm4free.browser_requests._http.compat import Session
 
 from llm4free.litagent import LitAgent
 from llm4free.llm.base import (

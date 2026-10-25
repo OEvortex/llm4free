@@ -4,7 +4,7 @@ import time
 from typing import Any, Dict, Generator, List, Optional, Union
 from uuid import uuid4
 
-from curl_cffi import requests
+from llm4free.browser_requests._http import compat as requests
 
 from llm4free import exceptions
 from llm4free.AIbase import AISearch, SearchResponse

@@ -10,7 +10,7 @@ from time import sleep
 from typing import Any, Optional, Tuple, Union
 
 from colorama import Fore
-from curl_cffi.requests import Session
+from llm4free.browser_requests._http.compat import Session
 from tqdm import tqdm
 
 from llm4free.litagent import LitAgent

@@ -19,7 +19,7 @@ from typing import (
     overload,
 )
 
-from curl_cffi import requests
+from llm4free.browser_requests._http import compat as requests
 from litprinter import ic
 
 from llm4free.AIbase import ModelList, SimpleModelList

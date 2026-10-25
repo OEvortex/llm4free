@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from curl_cffi.requests import Session
+from llm4free.browser_requests._http.compat import Session
 from packaging import version
 
 try:
@@ -28,9 +28,9 @@ except ImportError:
         def assemble(*_args: Any, **_kwargs: Any) -> str:
             return ""
 
-    Console = _Dummy
-    Panel = _Dummy
-    Text = _Dummy
+    Console = _Dummy  # ty:ignore[invalid-assignment]
+    Panel = _Dummy  # ty:ignore[invalid-assignment]
+    Text = _Dummy  # ty:ignore[invalid-assignment]
     HAS_RICH = False
 
 PYPI_URL = "https://pypi.org/pypi/llm4free/json"

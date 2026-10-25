@@ -3,7 +3,7 @@ import time
 import uuid
 from typing import Any, Dict, Generator, List, Optional, cast
 
-from curl_cffi.requests import RequestsError
+from llm4free.browser_requests._http.exceptions import RequestsError
 
 from llm4free.litagent import agent
 

@@ -6,7 +6,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from io import BytesIO
 from typing import Any, Optional, Union, cast
 
-from curl_cffi import CurlError, requests
+from llm4free.browser_requests._http.exceptions import CurlError
+from llm4free.browser_requests._http import compat as requests
 from litprinter import ic
 
 from llm4free import exceptions

@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 from typing import Any, BinaryIO, Generator, List, Optional, Union, cast
 
-import requests
+from llm4free.browser_requests._http import compat as requests
 
 from llm4free import exceptions
 from llm4free.litagent import LitAgent

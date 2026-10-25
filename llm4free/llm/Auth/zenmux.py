@@ -3,7 +3,7 @@ import time
 import uuid
 from typing import Any, Dict, Generator, List, Optional, Union, cast
 
-from curl_cffi import requests
+from llm4free.browser_requests._http import compat as requests
 
 from llm4free.litagent import LitAgent
 from llm4free.llm.base import (
@@ -282,7 +282,7 @@ class Zenmux(OpenAICompatibleProvider):
                 "User-Agent": LitAgent().random(),
             }
             try:
-                from curl_cffi.requests import Session as CurlSession
+                from llm4free.browser_requests._http.compat import Session as CurlSession
 
                 curl_available = True
             except Exception:

@@ -6,7 +6,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, Generator, List, Optional, Union, cast
 
-from curl_cffi import requests
+from llm4free.browser_requests._http import compat as requests
 
 from llm4free.llm.base import (
     BaseChat,

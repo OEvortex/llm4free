@@ -5,7 +5,8 @@ import pathlib
 import tempfile
 from typing import Any, Generator, List, Optional, Union, cast
 
-from curl_cffi import CurlError, requests
+from llm4free.browser_requests._http.exceptions import CurlError
+from llm4free.browser_requests._http import compat as requests
 from litprinter import ic
 
 from llm4free import exceptions

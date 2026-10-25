@@ -1,8 +1,9 @@
 """Lightweight proxy manager for streaming support and provider integration.
 
 This module provides a simple, monkey-patchable proxy manager that rotates
-through a pool of proxies. It works with both ``requests.Session`` and
-``curl_cffi.requests.Session``.
+through a pool of proxies. It patches LLM4Free's own HTTP
+(:class:`llm4free.browser_requests._http.compat.Session`) so every provider
+picks up the rotation automatically.
 
 Usage:
     >>> from llm4free.Extra.proxy_manager import ProxyManager
@@ -24,7 +25,6 @@ The credential is used as the proxy *username* and the literal password is
 """
 
 from __future__ import annotations
-from llm4free import LitAgent
 
 import asyncio
 import random
@@ -34,14 +34,14 @@ from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import quote
 
-import httpx
-from curl_cffi.requests import Session as CurlSession
 from litprinter import ic
 
-try:  # ``requests`` is an optional dependency of the rest of the project
-    from requests.sessions import Session as HttpSession
-except ImportError:  # pragma: no cover - only happens in minimal installs
-    HttpSession = None
+from ..browser_requests._http import AsyncClient
+from ..browser_requests._http.compat import Session as ScoutSession
+from ..browser_requests._http.exceptions import (
+    HTTPLLError,
+    HTTPStatusError,
+)
 
 
 _CLIENT_APP = "URBAN_VPN_BROWSER_EXTENSION"
@@ -167,28 +167,26 @@ class ProxyManager:
     # Urban VPN fetching
     # ------------------------------------------------------------------
     async def _request(
-        self, client: httpx.AsyncClient, method: str, url: str, **kwargs: Any
-    ) -> httpx.Response:
+        self, client: AsyncClient, method: str, url: str, **kwargs: Any
+    ) -> Any:
         """Perform an HTTP request with a small retry for transient failures."""
         last_error: Optional[Exception] = None
         for attempt in range(_REQUEST_ATTEMPTS):
             try:
                 response = await client.request(method, url, **kwargs)
-                if response.status_code == 429 or response.status_code >= 500:
-                    raise httpx.HTTPStatusError(
-                        f"Retryable HTTP {response.status_code}",
-                        request=response.request,
-                        response=response,
+            except HTTPLLError as exc:  # transport-level failure: retry
+                last_error = exc
+            else:
+                status = response.status_code
+                if status == 429 or status >= 500:
+                    last_error = HTTPStatusError(
+                        f"Retryable HTTP {status}", status_code=status, url=url
                     )
-                response.raise_for_status()
-                return response
-            except httpx.HTTPStatusError as exc:
-                last_error = exc
-                # 4xx responses (except 429) will not improve on retry.
-                if exc.response.status_code != 429 and exc.response.status_code < 500:
-                    raise
-            except httpx.HTTPError as exc:
-                last_error = exc
+                elif status >= 400:
+                    # 4xx (except 429) will not improve on retry.
+                    response.raise_for_status()
+                else:
+                    return response
 
             if attempt + 1 < _REQUEST_ATTEMPTS:
                 await asyncio.sleep(0.75 * (attempt + 1))
@@ -201,10 +199,9 @@ class ProxyManager:
         self, api_base: str, stats_base: str
     ) -> tuple[list[str], Optional[float]]:
         """Fetch proxies from one pair of API hosts."""
-        async with httpx.AsyncClient(
+        async with AsyncClient(
             headers=self._headers,
-            timeout=httpx.Timeout(_REQUEST_TIMEOUT),
-            follow_redirects=True,
+            timeout=_REQUEST_TIMEOUT,
         ) as client:
             # 1. Anonymous registration token.
             response = await self._request(
@@ -213,10 +210,10 @@ class ProxyManager:
                 f"{api_base}/registrations/clientApps/{_CLIENT_APP}/users/anonymous",
                 json={"clientApp": {"name": _CLIENT_APP, "browser": "CHROME"}},
             )
-            anon_token = response.json().get("value")
+            anon_token = (await response.ajson()).get("value")
             if not anon_token:
                 if self.debug:
-                    ic(f"Urban VPN anon response: {response.text}")
+                    ic(f"Urban VPN anon response: {await response.atext()}")
                 return [], None
 
             # 2. Security token used for the remaining API calls.
@@ -227,10 +224,10 @@ class ProxyManager:
                 headers={"authorization": f"Bearer {anon_token}"},
                 json={"type": "accs", "clientApp": {"name": _CLIENT_APP}},
             )
-            security_token = response.json().get("value")
+            security_token = (await response.ajson()).get("value")
             if not security_token:
                 if self.debug:
-                    ic(f"Urban VPN accs response: {response.text}")
+                    ic(f"Urban VPN accs response: {await response.atext()}")
                 return [], None
 
             # 3. Country/server list.  The extension sends the security token
@@ -241,7 +238,7 @@ class ProxyManager:
                 f"{stats_base}/entrypoints/countries",
                 headers={"authorization": f"Bearer {security_token}"},
             )
-            countries = response.json().get("countries", {}).get("elements") or []
+            countries = (await response.ajson()).get("countries", {}).get("elements") or []
 
             # 4. Pick a handful of accessible servers across countries.
             candidates: list[dict[str, Any]] = []
@@ -287,7 +284,7 @@ class ProxyManager:
                                 "signature": server["signature"],
                             },
                         )
-                        payload = response.json()
+                        payload = await response.ajson()
                     except Exception as exc:
                         if self.debug:
                             ic(f"Urban VPN credential request failed: {exc}")
@@ -489,7 +486,7 @@ class ProxyManager:
             setattr(session_class, "__init__", patched_init)
 
     def patch(self) -> None:
-        """Patch ``requests`` and ``curl_cffi`` sessions to use this manager.
+        """Patch LLM4Free's HTTP session to rotate through this manager.
 
         This is safe to call multiple times and from multiple managers.  The
         most recently patched manager receives the proxy rotation.
@@ -497,9 +494,7 @@ class ProxyManager:
         global _ACTIVE_MANAGER
         with _PATCH_LOCK:
             _ACTIVE_MANAGER = self
-        self._install_patch(CurlSession)
-        if HttpSession is not None:
-            self._install_patch(HttpSession)
+        self._install_patch(ScoutSession)
 
     def unpatch(self) -> None:
         """Restore the original session constructors."""
@@ -532,11 +527,12 @@ if __name__ == "__main__":
     print("Current proxy pool:", manager.proxies)
     manager.monkey_patch()
 
-    from curl_cffi import requests as curl_requests
+    from llm4free.browser_requests._http.compat import Session
 
     try:
-        # A fresh Session is created by ``get`` and receives a rotating proxy.
-        result = curl_requests.get("https://api.ipify.org?format=json", timeout=30)
+        # A fresh Session is created and receives a rotating proxy from the patch.
+        session = Session()
+        result = session.get("https://api.ipify.org?format=json", timeout=30)
         print(result.json())
     finally:
         manager.stop()

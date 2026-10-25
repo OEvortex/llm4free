@@ -20,7 +20,7 @@ import time
 import uuid
 from typing import Any, Dict, Generator, List, Optional, cast
 
-from curl_cffi.requests import Session
+from llm4free.browser_requests._http.compat import Session
 
 from llm4free.litagent import LitAgent
 from llm4free.llm.base import (

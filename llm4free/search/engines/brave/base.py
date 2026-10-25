@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from curl_cffi.requests import Session
+from llm4free.browser_requests._http.compat import Session
 
 from llm4free.litagent import LitAgent
 

@@ -17,9 +17,9 @@ except ImportError:
     LitAgent: Any = None
 
 try:
-    from curl_cffi.requests import Session
+    from llm4free.browser_requests._http.compat import Session
 except ImportError:
-    from curl_cffi import requests
+    from llm4free.browser_requests._http import compat as requests
 
     Session: Any = requests.Session
 
