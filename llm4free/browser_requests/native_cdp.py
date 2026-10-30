@@ -135,7 +135,6 @@ class CDPClient:
             raise last_error  # type: ignore[misc]
         self._closing = False
         self._listener = asyncio.ensure_future(self._receive_loop())
-        ic("CDPClient connected to %s:%s", self.host, self.port)
 
     async def close(self) -> None:
         """Detach the listener and close the socket."""
@@ -153,7 +152,6 @@ class CDPClient:
             if not fut.done():
                 fut.set_exception(WebSocketError("CDP connection closed"))
         self._pending.clear()
-        ic("CDPClient disconnected (%s:%s)", self.host, self.port)
 
     # ------------------------------------------------------------------ #
     # Commands

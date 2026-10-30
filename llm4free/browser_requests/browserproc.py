@@ -32,7 +32,10 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+import weakref
 from typing import Dict, Optional, Tuple
+
+from .proxy_auth import parse_proxy, resolve_proxy_str
 
 
 
@@ -133,12 +136,19 @@ def launch_stealth_chrome(
     host: str = "127.0.0.1",
     user_data_dir: Optional[str] = None,
     headless: bool = True,
+    proxy: Optional[str] = None,
 ) -> Tuple[Optional[subprocess.Popen], Optional[str]]:
     """Launch a real Chrome optimized to pass Cloudflare Turnstile headless.
 
     ``--disable-blink-features=AutomationControlled`` keeps
     ``navigator.webdriver`` ``false``, the user agent is masked to a genuine
     ``Chrome`` release, and ``--headless=new`` semantics are used.
+
+    Args:
+        proxy: Optional HTTP(S)/SOCKS proxy URL (credentials are stripped;
+            the native backend answers the ``407`` challenge over CDP). When
+            set, Chrome is launched with ``--proxy-server`` so *all* its
+            network — including in-page ``fetch`` — egresses through it.
 
     Returns:
         ``(process, profile_dir_or_None)``; ``(None, None)`` when an existing
@@ -160,6 +170,10 @@ def launch_stealth_chrome(
         "--window-size=1366,768",
         f"--user-agent={_chrome_user_agent(binary)}",
     ]
+    if proxy:
+        spec = parse_proxy(proxy)
+        if spec is not None:
+            flags.append(f"--proxy-server={spec.server}")
     if headless:
         flags.append("--headless=new")
 
@@ -252,24 +266,45 @@ class _Lease:
     refs: int = 0
     engine: str = "unknown"
     user_data_dir: Optional[str] = None
+    proxy: Optional[str] = None
 
 
 _POOL: Dict[Tuple[str, int], _Lease] = {}
-_pool_lock = asyncio.Lock()
+# The pool is mutated from many event loops (each provider call runs its own
+# ``asyncio.run`` in a worker thread). A single module-level ``asyncio.Lock``
+# binds to whichever loop first awaits it and then raises "bound to a different
+# event loop" on every subsequent loop, so the lock is held per-loop instead.
+# ``WeakKeyDictionary`` drops the entry once a loop is garbage-collected.
+_POOL_LOCKS: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Lock]" = (
+    weakref.WeakKeyDictionary()
+)
+
+
+def _get_pool_lock() -> asyncio.Lock:
+    """Return the pool lock owned by the *current* running event loop."""
+    loop = asyncio.get_running_loop()
+    lock = _POOL_LOCKS.get(loop)
+    if lock is None:
+        lock = asyncio.Lock()
+        _POOL_LOCKS[loop] = lock
+    return lock
 
 
 async def _compatible_running_lease(
-    engine: str, host: str, user_data_dir: Optional[str]
+    engine: str, host: str, user_data_dir: Optional[str], proxy: Optional[str] = None
 ) -> Optional[Tuple[str, int]]:
-    """Find a live engine lease we can share (same engine + profile shape).
+    """Find a live engine lease we can share (same engine + profile + proxy).
 
-    Chrome leases are only shared when the profile matches, since profiles
-    are exclusive; lightpanda is always shareable.
+    Chrome leases are only shared when the profile *and* proxy match, since a
+    proxy is baked into the launch flags; lightpanda is always shareable.
     """
+    want_proxy = resolve_proxy_str(proxy)
     for key, lease in _POOL.items():
         if key[0] != host or lease.engine != engine or lease.refs == 0:
             continue
         if engine == "chrome" and (lease.user_data_dir or None) != (user_data_dir or None):
+            continue
+        if engine == "chrome" and (lease.proxy or None) != want_proxy:
             continue
         if await asyncio.to_thread(cdp_alive, host, key[1]):
             return key
@@ -283,12 +318,14 @@ async def acquire(
     headless: bool = True,
     user_data_dir: Optional[str] = None,
     mask_user_agent: bool = True,
+    proxy: Optional[str] = None,
 ) -> Tuple[str, int, bool]:
     """Get (or start) a CDP endpoint for ``engine`` and hold a refcount slot.
 
-    Sessions with matching engine/profile reuse ONE launched browser
+    Sessions with matching engine/profile/proxy reuse ONE launched browser
     process; Chrome-style engines additionally require an equal
-    ``user_data_dir`` for sharing (profile exclusivity).
+    ``user_data_dir`` *and* ``proxy`` for sharing (both are baked into the
+    launch flags).
 
     Args:
         engine: ``"lightpanda"`` or ``"chrome"``. ``"chrome"`` reuses any
@@ -300,13 +337,16 @@ async def acquire(
         user_data_dir: Chrome profile dir (persistent profile).
         mask_user_agent: For lightpanda: try to override its own UA at the
             CDP level (kept for API parity; current builds ignore it).
+        proxy: Chrome ``--proxy-server`` proxy for the launched browser.
+            lightpanda ignores it (its own SSRF guard governs networking).
 
     Returns:
         ``(host, port, ours)`` — ``ours`` is True when the caller is now a
         refcount owner of a browser registered in our pool and must call
         :func:`release`.
     """
-    async with _pool_lock:
+    proxy = resolve_proxy_str(proxy)
+    async with _get_pool_lock():
         # Explicit port: adopt whatever listens there (no pool bookkeeping).
         if port is not None:
             if not await asyncio.to_thread(cdp_alive, host, port):
@@ -326,12 +366,12 @@ async def acquire(
                     )
                 elif engine == "chrome":
                     proc, profile_dir = await asyncio.to_thread(
-                        launch_stealth_chrome, port, host, user_data_dir, headless
+                        launch_stealth_chrome, port, host, user_data_dir, headless, proxy
                     )
                     if proc is not None:
                         _POOL[(host, port)] = _Lease(
                             proc=proc, profile=profile_dir, engine="chrome",
-                            user_data_dir=user_data_dir,
+                            user_data_dir=user_data_dir, proxy=proxy,
                         )
                 else:
                     raise ValueError(f"unknown engine: {engine}")
@@ -339,7 +379,7 @@ async def acquire(
             else:
                 key = None  # adopted external endpoint — nothing to release
         else:
-            key = await _compatible_running_lease(engine, host, user_data_dir)
+            key = await _compatible_running_lease(engine, host, user_data_dir, proxy)
             if key is None:
                 port = free_port()
                 if engine == "lightpanda":
@@ -357,13 +397,13 @@ async def acquire(
                     _POOL[key] = _Lease(proc=proc, profile=None, engine="lightpanda")
                 elif engine == "chrome":
                     proc, profile_dir = await asyncio.to_thread(
-                        launch_stealth_chrome, port, host, user_data_dir, headless
+                        launch_stealth_chrome, port, host, user_data_dir, headless, proxy
                     )
                     if proc is not None:
                         key = (host, port)
                         _POOL[key] = _Lease(
                             proc=proc, profile=profile_dir, engine="chrome",
-                            user_data_dir=user_data_dir,
+                            user_data_dir=user_data_dir, proxy=proxy,
                         )
                     else:
                         key = None  # external already running on that port
@@ -381,7 +421,7 @@ async def acquire(
 
 async def release(host: str, port: int, engine: str = "chrome") -> None:
     """Drop one refcount slot; stop the browser at zero (if we launched it)."""
-    async with _pool_lock:
+    async with _get_pool_lock():
         key = (host, port)
         lease = _POOL.get(key)
         if lease is None:
@@ -429,7 +469,10 @@ atexit.register(shutdown_all)
 
 async def ensure_running(engine: str, host: Optional[str] = None,
                          port: Optional[int] = None, headless: bool = True,
-                         user_data_dir: Optional[str] = None) -> Tuple[str, int]:
+                         user_data_dir: Optional[str] = None,
+                         proxy: Optional[str] = None) -> Tuple[str, int]:
     """Simpler acquire that ignores the refcount bookkeeping bool."""
-    h, p, _ = await acquire(engine, host or "127.0.0.1", port, headless, user_data_dir)
+    h, p, _ = await acquire(
+        engine, host or "127.0.0.1", port, headless, user_data_dir, proxy=proxy
+    )
     return h, p

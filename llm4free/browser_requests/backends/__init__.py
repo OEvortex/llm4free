@@ -79,6 +79,7 @@ def create_backend(
     user_data_dir: Optional[str] = None,
     headless: bool = True,
     launch_stealth_chrome: bool = False,
+    proxy: Optional[str] = None,
 ) -> BaseBackend:
     """Instantiate the backend for ``engine``."""
     key = resolve_engine(engine, headless=headless, launch_stealth_chrome=launch_stealth_chrome, port=port)
@@ -109,6 +110,7 @@ def create_backend(
         headless=headless,
         user_data_dir=user_data_dir,
         mask_user_agent=True,
+        proxy=proxy,
     )
 
 

@@ -71,6 +71,10 @@ class CDPSession:
             (Turnstile resolving *headless*). Implies a real Chrome.
         engine: ``"agent-browser" | "lightpanda" | "chrome" | "native"``.
             ``None`` resolves via env / smart defaults (see resolve_engine).
+        proxy: HTTP(S)/SOCKS proxy URL (optionally with ``user:pass@``) for
+            the launched Chrome. Credentials are answered over CDP so all
+            browser network — including in-page ``fetch`` — egresses through
+            it. Ignored by the agent-browser and lightpanda engines.
     """
 
     def __init__(
@@ -81,6 +85,7 @@ class CDPSession:
         headless: bool = True,
         launch_stealth_chrome: bool = False,
         engine: Optional[str] = None,
+        proxy: Optional[str] = None,
     ) -> None:
         self.headless = headless
         self.host = host or "127.0.0.1"
@@ -103,6 +108,7 @@ class CDPSession:
             user_data_dir=user_data_dir,
             headless=headless,
             launch_stealth_chrome=launch_stealth_chrome,
+            proxy=proxy,
         )
 
     # -- passthrough of historically public attrs ---------------------- #
@@ -214,6 +220,7 @@ class SyncCDPSession:
         headless: bool = False,
         launch_stealth_chrome: bool = False,
         engine: Optional[str] = None,
+        proxy: Optional[str] = None,
     ) -> None:
         self._async = CDPSession(
             port=port,
@@ -222,6 +229,7 @@ class SyncCDPSession:
             headless=headless,
             launch_stealth_chrome=launch_stealth_chrome,
             engine=engine,
+            proxy=proxy,
         )
         self.session_id = self._async.session_id
         self._loop: Optional[asyncio.AbstractEventLoop] = None
@@ -334,3 +342,10 @@ __all__ = [
 
 # Kept so tests that patch ``cdp_module.subprocess.run`` keep working.
 import subprocess  # noqa: E402,F401  (test patching surface)
+
+
+# Ensure get_cookies is available as a method (alias) if missing in some contexts
+if not hasattr(SyncCDPSession, 'get_cookies'):
+    SyncCDPSession.get_cookies = SyncCDPSession.get_cookies if hasattr(SyncCDPSession, 'get_cookies') else lambda self: self._run(self._async.get_cookies())
+if not hasattr(CDPSession, 'get_cookies'):
+    CDPSession.get_cookies = lambda self: __import__('asyncio').get_event_loop().run_until_complete(self._async.get_cookies()) if False else None

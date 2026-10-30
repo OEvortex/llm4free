@@ -12,7 +12,6 @@ from llm4free.llm.akashgpt import AkashGPT
 from llm4free.llm.Auth import (
     Cerebras,
     DeepAI,
-    DeepInfra,
     Groq,
     HuggingFace,
     Nvidia,
@@ -37,6 +36,7 @@ from llm4free.llm.base import (
 )
 from llm4free.llm.chatgpt import ChatGPT, ChatGPTReversed
 from llm4free.llm.chatbotchatapp import ChatBotChatApp
+from llm4free.llm.deepinfra import DeepInfra
 
 # Provider implementations
 from llm4free.llm.gemini import Gemini

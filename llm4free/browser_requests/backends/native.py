@@ -20,6 +20,7 @@ from typing import Any, List, Optional
 
 from ..browserproc import acquire, release
 from ..native_cdp import CDPClient, CDPError
+from ..proxy_auth import ProxySpec, parse_proxy
 from ..stealth import STEALTH_INIT_JS
 from .base import BaseBackend
 
@@ -41,6 +42,7 @@ class NativeCDPBackend(BaseBackend):
         launch_stealth_chrome: bool = False,
         mask_user_agent: bool = True,
         load_wait: float = 45.0,
+        proxy: Optional[str] = None,
     ) -> None:
         """Configure the backend.
 
@@ -54,6 +56,9 @@ class NativeCDPBackend(BaseBackend):
             user_data_dir: persistent Chrome profile directory.
             mask_user_agent: try a CDP-level UA override (engine-dependent).
             load_wait: max seconds to wait for navigation loads/events.
+            proxy: HTTP(S)/SOCKS proxy for the launched Chrome. Credentials are
+                applied over CDP (``Fetch.authRequired``) so the in-page
+                ``fetch`` used by anonymous providers egresses through it.
 
         Unused args are accepted for uniform registry construction.
         """
@@ -65,6 +70,8 @@ class NativeCDPBackend(BaseBackend):
         self.user_data_dir = user_data_dir
         self.mask_user_agent = mask_user_agent
         self.load_wait = load_wait
+        self._proxy = proxy
+        self._proxy_spec: Optional[ProxySpec] = parse_proxy(proxy)
         self._client: Optional[CDPClient] = None
         self._flat_session: Optional[str] = None
         self._target_id: Optional[str] = None
@@ -98,6 +105,7 @@ class NativeCDPBackend(BaseBackend):
                 headless=self.headless,
                 user_data_dir=self.user_data_dir,
                 mask_user_agent=self.mask_user_agent,
+                proxy=self._proxy,
             )
             self.host, self.port, self._ours = host, port, ours
 
@@ -158,6 +166,86 @@ class NativeCDPBackend(BaseBackend):
         client.on_event("Runtime.consoleAPICalled", self._console_sink)
         client.on_event("Network.requestWillBeSent", self._request_sink)
         client.on_event("Network.responseReceived", self._response_sink)
+
+        if self._proxy_spec is not None:
+            await self._setup_proxy_auth(client, sid)
+
+    async def _setup_proxy_auth(self, client: CDPClient, sid: str) -> None:
+        """Answer ``407`` proxy-auth challenges for ``--proxy-server`` auth.
+
+        ``Fetch.enable`` with ``handleAuthRequests`` makes Chrome emit
+        ``Fetch.authRequired`` instead of failing the request; we reply with
+        ``Fetch.continueWithAuth`` (Basic credentials).
+
+        * Credentialed proxy: a catch-all pattern (the Playwright-proven mode
+          for proxy auth) so every request reaches our handlers — normal ones
+          are resumed via ``Fetch.continueRequest``, challenges via
+          ``continueWithAuth``.
+        * Anonymous proxy: no patterns, so nothing is intercepted (``--proxy-server``
+          alone routes the traffic) and there is no per-request overhead.
+
+        Only applies to the Chrome engine.
+        """
+        if self.engine_name != "chrome" or self._proxy_spec is None:
+            return
+        spec = self._proxy_spec
+        try:
+            await client.call(
+                "Fetch.enable",
+                {
+                    "patterns": (
+                        [{"urlPattern": "*"}] if spec.requires_auth else []
+                    ),
+                    "handleAuthRequests": True,
+                },
+                session_id=sid,
+            )
+        except CDPError as e:
+            ic(f"Fetch.enable failed for proxy auth: {e}")
+            return
+
+        async def _on_auth_required(event: dict) -> None:
+            if not self._own(event):
+                return
+            request_id = (event.get("params") or {}).get("requestId")
+            if not request_id:
+                return
+            try:
+                await client.call(
+                    "Fetch.continueWithAuth",
+                    {
+                        "requestId": request_id,
+                        "authChallengeResponse": {
+                            "response": "ProvideCredentials",
+                            "username": spec.username,
+                            "password": spec.password,
+                        },
+                    },
+                    session_id=sid,
+                    timeout=30,
+                )
+            except Exception as e:  # noqa: BLE001 - best effort
+                ic(f"proxy auth response failed: {e}")
+
+        async def _on_request_paused(event: dict) -> None:
+            if not self._own(event):
+                return
+            params = event.get("params") or {}
+            request_id = params.get("requestId")
+            if not request_id:
+                return
+            try:
+                await client.call(
+                    "Fetch.continueRequest",
+                    {"requestId": request_id},
+                    session_id=sid,
+                    timeout=30,
+                )
+            except Exception:  # noqa: BLE001 - already handled/canceled
+                pass
+
+        client.on_event("Fetch.authRequired", _on_auth_required)
+        client.on_event("Fetch.requestPaused", _on_request_paused)
 
     def _own(self, event: dict) -> bool:
         """Whether ``event`` belongs to this session's tab."""

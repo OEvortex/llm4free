@@ -2,7 +2,6 @@
 
 from llm4free.llm.Auth.cerebras import Cerebras
 from llm4free.llm.Auth.deep_ai import DeepAI
-from llm4free.llm.Auth.deepinfra import DeepInfra
 from llm4free.llm.Auth.groq import Groq
 from llm4free.llm.Auth.huggingface import HuggingFace
 from llm4free.llm.Auth.nvidia import Nvidia
@@ -19,7 +18,6 @@ __all__ = [
     "TogetherAI",
     "TwoAI",
     "Cerebras",
-    "DeepInfra",
     "Groq",
     "HuggingFace",
     "Nvidia",
