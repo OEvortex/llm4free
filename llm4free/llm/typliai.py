@@ -106,7 +106,7 @@ class Completions(BaseCompletions):
                 stream=True,
                 timeout=timeout or self._client.timeout,
                 impersonate="chrome120",
-                proxies=proxies or self._client.proxies,  # ty:ignore[invalid-argument-type]
+                proxies=proxies or self._client.proxies,
             )
 
             if not response.ok:
@@ -326,7 +326,7 @@ class TypliAI(OpenAICompatibleProvider):
                 headers=self.headers,
                 timeout=self.timeout,
                 impersonate="chrome120",
-                proxies=proxies or self.proxies,  # ty:ignore[invalid-argument-type]
+                proxies=proxies or self.proxies,
             )
             # Extract CSRF token from cookies and decode it
             csrf_token = self.session.cookies.get("csrf-token")

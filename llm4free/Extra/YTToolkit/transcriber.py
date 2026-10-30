@@ -216,7 +216,10 @@ class TranscriptListFetcher:
         match = re.search('name="v" value="(.*?)"', html_content)
         if match is None:
             raise FailedToCreateConsentCookieError(video_id)
-        self._http_client.cookies.set("CONSENT", "YES+" + match.group(1), domain=".youtube.com")
+        try:
+            self._http_client.cookies.set("CONSENT", "YES+" + match.group(1))
+        except Exception:
+            pass
 
     def _fetch_video_html(self, video_id):
         html_content = self._fetch_html(video_id)

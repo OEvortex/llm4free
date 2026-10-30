@@ -321,9 +321,9 @@ class IAsk(AISearch):
             if response.status_code != 200:
                 raise exceptions.APIConnectionError(
                     "Failed to generate response - "
-                    f"({response.status_code}, {response.reason}) - {response.text}"
+                    f"({response.status_code}, {getattr(response, 'reason', '')}) - {getattr(response, 'text', '')}"
                 )
-            return self._extract_answer(response.text)
+            return self._extract_answer(getattr(response, 'text', '') or '')
 
         # For non-streaming, collect all chunks and return a single response
         if not stream:

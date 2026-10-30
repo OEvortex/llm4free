@@ -201,13 +201,13 @@ class Completions(BaseCompletions):
                     id=request_id,
                     created=created_time,
                     model=model,
-                    choices=[ChoiceDelta(index=0, delta=ChoiceDelta.MessageDelta(content=final), finish_reason=None)],
+                    choices=[Choice(index=0, delta=ChoiceDelta(content=final), finish_reason=None)],
                 )
                 yield ChatCompletionChunk(
                     id=request_id,
                     created=created_time,
                     model=model,
-                    choices=[ChoiceDelta(index=0, delta=ChoiceDelta.MessageDelta(content=""), finish_reason="stop")],
+                    choices=[Choice(index=0, delta=ChoiceDelta(content=""), finish_reason="stop")],
                 )
             return gen()
 
@@ -250,7 +250,8 @@ if __name__ == "__main__":
     c = Liquid()
     try:
         r = c.chat.completions.create(model="lfm2.5-24b-a2b", messages=[{"role": "user", "content": "Hello, how are you?"}], stream=False)
-        print(r.choices[0].message.content)
+        if r.choices and r.choices[0].message and r.choices[0].message.content:
+            print(r.choices[0].message.content)
     except Exception as e:
         print(e)
         raise

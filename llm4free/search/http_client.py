@@ -69,7 +69,7 @@ class HttpClient:
             headers=headers or {},
             proxies={"http": self.proxy, "https": self.proxy} if self.proxy else None,
             timeout=cast(Any, timeout),
-            impersonate=impersonate_browser,  # ty:ignore[invalid-argument-type]
+            impersonate=impersonate_browser,
             verify=verify,
         )
 

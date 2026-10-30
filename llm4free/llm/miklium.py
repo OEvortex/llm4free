@@ -120,7 +120,7 @@ class Completions(BaseCompletions):
                 headers=self._client.headers,
                 json=payload,
                 timeout=timeout or 30,
-                proxies=proxies,  # ty:ignore[invalid-argument-type]
+                proxies=proxies,
                 impersonate="chrome",
             )
 
@@ -203,7 +203,7 @@ class Miklium(OpenAICompatibleProvider):
 
         self.session = Session()
         if self.proxies:
-            self.session.proxies.update(self.proxies)  # ty:ignore[invalid-argument-type]
+            self.session.proxies.update(self.proxies)
 
         self.timeout = 30
         self.api_endpoint = "https://miklium.vercel.app/api/chatbot"

@@ -285,7 +285,10 @@ class VisualGPT(TTICompatibleProvider):
             elif isinstance(cookies_data, dict):
                 # Simple JSON format (dict of cookie_name: cookie_value)
                 for name, value in cookies_data.items():
-                    self.session.cookies.set(name, value, domain="visualgpt.io")
+                    try:
+                        self.session.cookies.set(name, value)
+                    except Exception:
+                        pass
             else:
                 raise ValueError(
                     "Invalid cookies format. Expected a list (Netscape format) "
