@@ -6,6 +6,7 @@
 
 # Base classes and utilities
 from llm4free.llm.ai4chat import AI4Chat
+from llm4free.llm.aiforg import AIForg
 from llm4free.llm.askmeai import AskMeAI
 from llm4free.llm.chatjimmy import ChatJimmy
 from llm4free.llm.akashgpt import AkashGPT
@@ -39,10 +40,12 @@ from llm4free.llm.chatbotchatapp import ChatBotChatApp
 from llm4free.llm.deepinfra import DeepInfra
 
 # Provider implementations
+from llm4free.llm.allenai import AllenAI
 from llm4free.llm.gemini import Gemini
 from llm4free.llm.gptfree import GptFree
 from llm4free.llm.ibm import IBM
 from llm4free.llm.k2think import K2Think
+from llm4free.llm.liquid import Liquid
 from llm4free.llm.miklium import Miklium
 from llm4free.llm.netwrck import Netwrck
 from llm4free.llm.rewind import RewindAI
@@ -107,12 +110,14 @@ __all__ = [
     "TwoAI",
     "AI4Chat",
     "AkashGPT",
+    "AllenAI",
     "AskMeAI",
     "Cerebras",
     "ChatGPT",
     "ChatGPTReversed",
     "ChatBotChatApp",
     "DeepInfra",
+    "AIForg",
 
 
     "Gemini",
@@ -120,6 +125,7 @@ __all__ = [
     "IBM",
     "ChatJimmy",
     "K2Think",
+    "Liquid",
     "Netwrck",
     "RewindAI",
     "Nvidia",
