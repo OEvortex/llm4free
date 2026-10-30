@@ -209,7 +209,12 @@ class Completions(BaseCompletions):
         except Exception as e:
             raise IOError(f"TwoAI request failed: {e}") from e
         finally:
-            self._client.session.proxies.clear()  # ty:ignore[unresolved-attribute]
+            try:
+                p = getattr(self._client.session, "proxies", None)
+                if p is not None and hasattr(p, "clear"):
+                    p.clear()
+            except Exception:
+                pass
             self._client.session.proxies.update(cast(Any, original_proxies))
 
 

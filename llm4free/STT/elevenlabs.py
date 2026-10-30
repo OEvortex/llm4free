@@ -170,7 +170,7 @@ class ElevenLabsTranscriptions(BaseSTTTranscriptions):
             files=files,
             headers=headers,
             timeout=timeout or self._client.timeout,
-            proxies=proxies or getattr(self._client, "proxies", None)
+            proxies=proxies or getattr(self._client, "proxies", None),
             stream=True,
         )
         if response.status_code != 200:

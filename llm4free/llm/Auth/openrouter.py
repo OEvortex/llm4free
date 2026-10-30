@@ -194,7 +194,7 @@ class Completions(BaseCompletions):
                 headers=self._client.headers,
                 json=payload,
                 timeout=timeout or self._client.timeout,
-                proxies=proxies
+                proxies=proxies,
                 impersonate="chrome120",
             )
             response.raise_for_status()

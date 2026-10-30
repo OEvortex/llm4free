@@ -95,7 +95,7 @@ class Completions(BaseCompletions):
                 json=payload,
                 stream=True,
                 timeout=timeout or self._client.timeout,
-                proxies=proxies
+                proxies=proxies,
             )
             response.raise_for_status()
             prompt_tokens = count_tokens(
