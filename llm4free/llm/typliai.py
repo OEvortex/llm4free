@@ -310,10 +310,33 @@ class TypliAI(OpenAICompatibleProvider):
             "user-agent": user_agent,
         }
 
-        self.session.headers.update(self.headers)
+        try:
+            h = getattr(self.session, 'headers', None)
+            if h is None:
+                self.session.headers = dict(self.headers)
+            else:
+                try:
+                    h.update(self.headers)
+                    self.session.headers = h
+                except Exception:
+                    self.session.headers = dict(h)
+                    self.session.headers.update(self.headers)
+        except Exception:
+            self.session.headers = dict(self.headers)
         if proxies:
-            if proxies:
-                self.session.proxies.update(cast(Any, proxies))
+            try:
+                p = getattr(self.session, 'proxies', None)
+                pd = dict(proxies)
+                if p is None:
+                    self.session.proxies = pd
+                else:
+                    try:
+                        p.update(pd)
+                        self.session.proxies = p
+                    except Exception:
+                        self.session.proxies = {**dict(p), **pd}
+            except Exception:
+                self.session.proxies = dict(proxies) if proxies else getattr(self.session, 'proxies', {})
 
         self.chat = Chat(self)
 

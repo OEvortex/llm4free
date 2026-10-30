@@ -110,11 +110,21 @@ class ElevenlabsTTS(BaseTTSProvider):
         self.api_key = api_key or os.getenv("ELEVENLABS_API_KEY")
         self.api_url = "https://api.elevenlabs.io/v1/text-to-speech"
         self.session = requests.Session()
-        self.session.headers.update(self.headers)
+        try:
+            self.session.headers.update(self.headers)
+        except Exception:
+            self.session.headers = dict(self.session.headers or {})
+            self.session.headers.update(self.headers)
         if self.api_key:
-            self.session.headers.update({"xi-api-key": self.api_key})
+            try:
+                self.session.headers.update({"xi-api-key": self.api_key})
+            except Exception:
+                self.session.headers["xi-api-key"] = self.api_key
         if proxies:
-            self.session.proxies.update(cast(Any, proxies))
+            try:
+                self.session.proxies.update(cast(Any, proxies))
+            except Exception:
+                self.session.proxies = {**(self.session.proxies or {}), **dict(proxies)}
         self.timeout = timeout
         self.default_voice = "brian"
 

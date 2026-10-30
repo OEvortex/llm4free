@@ -73,9 +73,15 @@ class MurfAITTS(BaseTTSProvider):
         """Initializes the MurfAITTS TTS client."""
         super().__init__()
         self.session = requests.Session()
-        self.session.headers.update(self.headers)
+        try:
+            self.session.headers.update(self.headers)
+        except Exception:
+            self.session.headers = {**(dict(getattr(self.session, 'headers', {}) or {})), **self.headers}
         if proxies:
-            self.session.proxies.update(cast(Any, proxies))
+            try:
+                self.session.proxies.update(cast(Any, proxies))
+            except Exception:
+                self.session.proxies = {**(dict(getattr(self.session, 'proxies', {}) or {})), **dict(proxies)}
         self.timeout = timeout
 
     def tts(self, text: str, voice: Optional[str] = None, verbose: bool = False, **kwargs) -> str:

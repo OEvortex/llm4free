@@ -113,7 +113,10 @@ class Session:
         # (``session.headers.update(...)``) are always honored.
         call_headers = dict(self.headers)
         if kwargs.get("headers"):
-            call_headers.update(dict(kwargs["headers"]))
+            try:
+                call_headers.update(dict(kwargs["headers"]))
+            except Exception:
+                pass
         if call_headers:
             kwargs["headers"] = call_headers
         if self.auth is not None:
@@ -125,8 +128,35 @@ class Session:
             kwargs["proxies"] = per_proxy
         resp = client.request(method, url, **kwargs)
         # persist cookies acquired during the request back onto the session
-        self.cookies.update(resp.cookies.to_dict())
+        try:
+            if hasattr(self.cookies, 'update'):
+                self.cookies.update(getattr(resp.cookies, 'to_dict', lambda: {})())
+        except Exception:
+            pass
         return resp
+
+    def stream(self, method: str, url: str, **kwargs: Any):
+        client = self._ensure_client()
+        kwargs.setdefault("allow_redirects", self.allow_redirects)
+        kwargs.setdefault("verify", self.verify)
+        if self.timeout is not None:
+            kwargs.setdefault("timeout", self.timeout)
+        if self.cert is not None:
+            kwargs.setdefault("cert", self.cert)
+        call_headers = dict(self.headers)
+        if kwargs.get("headers"):
+            try:
+                call_headers.update(dict(kwargs["headers"]))
+            except Exception:
+                pass
+        if call_headers:
+            kwargs["headers"] = call_headers
+        if self.auth is not None:
+            kwargs.setdefault("auth", self.auth)
+        per_proxy = _first_proxy(self.proxies, self.proxy)
+        if per_proxy and "proxy" not in kwargs and "proxies" not in kwargs:
+            kwargs["proxies"] = per_proxy
+        return client.stream(method, url, **kwargs)
 
     def _verb(self, method: str, url: str, **kwargs: Any) -> Response:
         return self.request(method, url, **kwargs)

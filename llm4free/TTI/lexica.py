@@ -4,7 +4,7 @@ from typing import Any, List, Optional
 
 from llm4free.browser_requests._http.exceptions import CurlError
 from llm4free.browser_requests._http import compat as requests
-from urllib.parse import quote as curl_utils
+from urllib.parse import quote
 
 from llm4free.AIbase import SimpleModelList
 from llm4free.litagent import LitAgent
@@ -54,7 +54,7 @@ class Images(BaseImages):
         self._client = client
 
     def _search(self, prompt: str, timeout: int, session: requests.Session) -> List[str]:
-        url = f"{SEARCH_BASE}/?q={curl_utils.quote(prompt)}&_rsc={RSC_BUILD_HASH}"
+        url = f"{SEARCH_BASE}/?q={quote(prompt)}&_rsc={RSC_BUILD_HASH}"
         try:
             resp = session.get(
                 url,

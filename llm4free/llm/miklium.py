@@ -203,7 +203,7 @@ class Miklium(OpenAICompatibleProvider):
 
         self.session = Session()
         if self.proxies:
-            self.session.proxies.update(self.proxies)
+            self.session.proxies = {**(self.session.proxies or {}), **self.proxies}
 
         self.timeout = 30
         self.api_endpoint = "https://miklium.vercel.app/api/chatbot"
@@ -217,7 +217,10 @@ class Miklium(OpenAICompatibleProvider):
             "user-agent": self.user_agent,
         }
 
-        self.session.headers.update(self.headers)
+        try:
+            self.session.headers.update(self.headers)
+        except Exception:
+            self.session.headers = self.headers
         self.chat = Chat(self)
 
     @property

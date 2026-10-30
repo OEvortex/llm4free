@@ -276,12 +276,13 @@ class VisualGPT(TTICompatibleProvider):
                 # Netscape cookie format (list of cookie objects)
                 for cookie in cookies_data:
                     if cookie.get("name") and cookie.get("value"):
-                        self.session.cookies.set(
-                            cookie["name"],
-                            cookie["value"],
-                            domain=cookie.get("domain", "visualgpt.io"),
-                            path=cookie.get("path", "/"),
-                        )
+                        try:
+                            self.session.cookies.set(
+                                cookie["name"],
+                                cookie["value"],
+                            )
+                        except Exception:
+                            pass
             elif isinstance(cookies_data, dict):
                 # Simple JSON format (dict of cookie_name: cookie_value)
                 for name, value in cookies_data.items():

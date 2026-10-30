@@ -266,7 +266,12 @@ class Zenmux(OpenAICompatibleProvider):
         }
         if api_key is not None:
             self.headers["Authorization"] = f"Bearer {api_key}"
-        self.session.headers.update(self.headers)
+        try:
+            self.session.headers.update(self.headers)
+        except Exception:
+            h = dict(getattr(self.session, 'headers', {}) or {})
+            h.update(self.headers)
+            self.session.headers = h
         self.chat = Chat(self)
         try:
             self.update_available_models(api_key)
