@@ -75,7 +75,16 @@ class ChatGPTReversed:
     """
 
     AVAILABLE_MODELS = [
+        "auto",
         "GPT-6-free",
+        "gpt-4o",
+        "gpt-4o-mini",
+        "gpt-4",
+        "gpt-3.5-turbo",
+        "o1",
+        "o1-mini",
+        "o3-mini",
+        "chatgpt",
     ]
 
     def __init__(self, model: str = "auto", timeout: int = DEFAULT_TIMEOUT) -> None:
@@ -86,11 +95,13 @@ class ChatGPTReversed:
                 endpoint serves its default model regardless of this value.
             timeout: Maximum seconds to wait for a complete answer.
         """
-        if model not in self.AVAILABLE_MODELS:
-            raise ValueError(
-                f"Invalid model: {model}. Choose from: {self.AVAILABLE_MODELS}"
-            )
-        self.model = model
+        if not model or model == "auto":
+            self.model = "auto"
+        elif model in self.AVAILABLE_MODELS:
+            self.model = model
+        else:
+            # Be permissive for compatibility with other code expecting different names
+            self.model = "auto"
         self.timeout = timeout
 
     def initialize(self) -> None:
@@ -108,10 +119,10 @@ class ChatGPTReversed:
             The assistant response as plain text.
         """
         selected_model = model or self.model
-        if selected_model not in self.AVAILABLE_MODELS:
-            raise ValueError(
-                f"Invalid model: {selected_model}. Choose from: {self.AVAILABLE_MODELS}"
-            )
+        if selected_model and selected_model not in self.AVAILABLE_MODELS and selected_model != "auto":
+            selected_model = "auto"
+        elif not selected_model:
+            selected_model = "auto"
         return "".join(_stream_conversation(message, self.timeout))
 
 
@@ -493,7 +504,9 @@ class Completions(BaseCompletions):
             :class:`ChatCompletionChunk` objects.
         """
         del max_tokens, temperature, top_p, tools, tool_choice, proxies, kwargs
-        if model not in ChatGPTReversed.AVAILABLE_MODELS:
+        if model not in ChatGPTReversed.AVAILABLE_MODELS and model != "auto":
+            model = "auto"
+        elif model == "auto":
             model = "auto"
         prompt = _build_prompt(messages)
         request_id = f"chatcmpl-{uuid.uuid4()}"

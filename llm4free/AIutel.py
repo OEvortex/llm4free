@@ -23,13 +23,12 @@ def timeIt(func: Callable):
     def _log_elapsed(func_name: str, elapsed: float) -> None:
         msg = f"\n{GREEN_BOLD}- Execution time for '{func_name}' : {elapsed:.6f} Seconds.  {RESET}\n"
         try:
-            ic(msg)
+            print(msg, end="")
         except Exception:
-            pass
-        try:
-            print(msg)
-        except Exception:
-            pass
+            try:
+                ic(msg)
+            except Exception:
+                pass
 
     @functools.wraps(func)
     def sync_wrapper(*args, **kwargs):
