@@ -112,7 +112,7 @@ class Completions(BaseCompletions):
                 json=payload,
                 stream=True,
                 timeout=timeout or self._client.timeout,
-                proxies=proxies or getattr(self._client, "proxies", None),  # ty: ignore
+                proxies=proxies or getattr(self._client, "proxies", None)
             )
 
             if not response.ok:
@@ -201,7 +201,7 @@ class Completions(BaseCompletions):
                 headers=self._client.headers,
                 json=payload,
                 timeout=timeout or self._client.timeout,
-                proxies=proxies or getattr(self._client, "proxies", None),  # ty: ignore
+                proxies=proxies or getattr(self._client, "proxies", None)
             )
 
             if not response.ok:

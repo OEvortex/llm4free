@@ -1493,16 +1493,16 @@ lit_streamer = _sanitize_stream_decorator
 
 # Allow @sanitize_stream and @lit_streamer as decorators
 try:
-    sanitize_stream.__decorator__ = _sanitize_stream_decorator  # ty: ignore
-except AttributeError:
+    setattr(sanitize_stream, "__decorator__", _sanitize_stream_decorator)
+except Exception:
     pass
 try:
-    LITSTREAM.__decorator__ = _sanitize_stream_decorator  # ty: ignore
-except AttributeError:
+    setattr(LITSTREAM, "__decorator__", _sanitize_stream_decorator)
+except Exception:
     pass
 try:
-    lit_streamer.__decorator__ = _sanitize_stream_decorator  # ty: ignore
-except AttributeError:
+    setattr(lit_streamer, "__decorator__", _sanitize_stream_decorator)
+except Exception:
     pass
 
 

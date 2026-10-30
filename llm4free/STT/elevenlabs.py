@@ -118,7 +118,7 @@ class ElevenLabsTranscriptions(BaseSTTTranscriptions):
                 files=files,
                 headers=headers,
                 timeout=timeout or self._client.timeout,
-                proxies=proxies or getattr(self._client, "proxies", None),  # ty:ignore[invalid-argument-type]
+                proxies=proxies or getattr(self._client, "proxies", None)
             )
             if response.status_code != 200:
                 raise exceptions.FailedToGenerateResponseError(
@@ -170,7 +170,7 @@ class ElevenLabsTranscriptions(BaseSTTTranscriptions):
             files=files,
             headers=headers,
             timeout=timeout or self._client.timeout,
-            proxies=proxies or getattr(self._client, "proxies", None),  # ty:ignore[invalid-argument-type]
+            proxies=proxies or getattr(self._client, "proxies", None)
             stream=True,
         )
         if response.status_code != 200:

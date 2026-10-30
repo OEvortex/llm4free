@@ -192,7 +192,9 @@ class CookieHarvester:
         """
         result = HarvestResult(url=url)
         start = time.time()
-        state_path = save_path or tempfile.mktemp(suffix=".json", prefix="cookie_harvester_")  # ty:ignore[deprecated]
+        import os
+        fd, state_path = tempfile.mkstemp(suffix=".json", prefix="cookie_harvester_")
+        os.close(fd)
         result.state_path = state_path
 
         try:

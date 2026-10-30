@@ -15,7 +15,10 @@ from tqdm import tqdm
 
 from llm4free.litagent import LitAgent
 try:
-    from llm4free.swiftcli import CLI, option, argument  # ty:ignore[unresolved-import]
+    try:
+        from llm4free.swiftcli import CLI, option, argument
+    except Exception:
+        raise ImportError("swiftcli is required for this CLI")
 except Exception:
     class CLI:
         def __init__(self,*a,**k): pass

@@ -89,7 +89,7 @@ class Completions(BaseCompletions):
                 json=payload,
                 stream=True,
                 timeout=timeout if timeout is not None else self._client.timeout,
-                proxies=proxies or getattr(self._client, "proxies", None),  # ty:ignore[invalid-argument-type]
+                proxies=proxies or getattr(self._client, "proxies", None)
             )
             response.raise_for_status()
 
@@ -169,7 +169,7 @@ class Completions(BaseCompletions):
                 headers=self._client.headers,
                 json=payload,
                 timeout=timeout if timeout is not None else self._client.timeout,
-                proxies=proxies or getattr(self._client, "proxies", None),  # ty:ignore[invalid-argument-type]
+                proxies=proxies or getattr(self._client, "proxies", None)
             )
             response.raise_for_status()
             data = response.json()
