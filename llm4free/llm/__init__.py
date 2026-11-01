@@ -5,26 +5,6 @@
 # llm4free/Provider/UNFINISHED/ (their upstreams went away).
 
 # Base classes and utilities
-from llm4free.llm.ai4chat import AI4Chat
-from llm4free.llm.aiforg import AIForg
-from llm4free.llm.askmeai import AskMeAI
-from llm4free.llm.chatjimmy import ChatJimmy
-from llm4free.llm.akashgpt import AkashGPT
-from llm4free.llm.Auth import (
-    Cerebras,
-    DeepAI,
-    Groq,
-    HuggingFace,
-    Nvidia,
-    OpenRouter,
-    Sambanova,
-    TogetherAI,
-    TwoAI,
-    Upstage,
-    Zenmux,
-)
-from llm4free.llm.Auth.textpollinations import TextPollinations
-from llm4free.llm.Auth.uncensoredchat import UncensoredChat
 from llm4free.llm.base import (
     BaseChat,
     BaseCompletions,
@@ -35,24 +15,7 @@ from llm4free.llm.base import (
     Tool,
     ToolDefinition,
 )
-from llm4free.llm.chatgpt import ChatGPT, ChatGPTReversed
-from llm4free.llm.chatbotchatapp import ChatBotChatApp
-from llm4free.llm.deepinfra import DeepInfra
 
-# Provider implementations
-from llm4free.llm.allenai import AllenAI
-from llm4free.llm.gemini import Gemini
-from llm4free.llm.gptfree import GptFree
-from llm4free.llm.ibm import IBM
-from llm4free.llm.k2think import K2Think
-from llm4free.llm.liquid import Liquid
-from llm4free.llm.miklium import Miklium
-from llm4free.llm.netwrck import Netwrck
-from llm4free.llm.rewind import RewindAI
-from llm4free.llm.ollama_swarm import OllamaSwarm
-from llm4free.llm.pi import PiAI
-from llm4free.llm.toolbaz import Toolbaz
-from llm4free.llm.typliai import TypliAI
 from llm4free.llm.utils import (
     ChatCompletion,
     ChatCompletionChunk,
@@ -71,6 +34,44 @@ from llm4free.llm.utils import (
     get_last_user_message,
     get_system_prompt,
 )
+# Provider implementations
+from llm4free.llm.Auth import (
+    Cerebras,
+    DeepAI,
+    Groq,
+    HuggingFace,
+    Nvidia,
+    OpenRouter,
+    Sambanova,
+    TogetherAI,
+    TwoAI,
+    Upstage,
+    Zenmux,
+    UncensoredChat,
+    TextPollinations
+)
+from llm4free.llm.ai4chat import AI4Chat
+from llm4free.llm.aiforg import AIForg
+from llm4free.llm.askmeai import AskMeAI
+from llm4free.llm.chatjimmy import ChatJimmy
+from llm4free.llm.akashgpt import AkashGPT
+from llm4free.llm.chatgpt import ChatGPT, ChatGPTReversed
+from llm4free.llm.chatbotchatapp import ChatBotChatApp
+from llm4free.llm.deepinfra import DeepInfra
+from llm4free.llm.allenai import AllenAI
+from llm4free.llm.gemini import Gemini
+from llm4free.llm.gptfree import GptFree
+from llm4free.llm.ibm import IBM
+from llm4free.llm.k2think import K2Think
+from llm4free.llm.liquid import Liquid
+from llm4free.llm.miklium import Miklium
+from llm4free.llm.netwrck import Netwrck
+from llm4free.llm.notegpt import NoteGPT
+from llm4free.llm.rewind import RewindAI
+from llm4free.llm.ollama_swarm import OllamaSwarm
+from llm4free.llm.pi import PiAI
+from llm4free.llm.toolbaz import Toolbaz
+from llm4free.llm.typliai import TypliAI
 from llm4free.llm.wisecat import WiseCat
 
 # List of all exported names
@@ -101,10 +102,8 @@ __all__ = [
     "get_system_prompt",
     "get_last_user_message",
     "count_tokens",
-
+    # Providers
     "DeepAI",
-
-
     "PiAI",
     "TogetherAI",
     "TwoAI",
@@ -118,8 +117,6 @@ __all__ = [
     "ChatBotChatApp",
     "DeepInfra",
     "AIForg",
-
-
     "Gemini",
     "GptFree",
     "IBM",
@@ -138,10 +135,8 @@ __all__ = [
     "Zenmux",
     "Sambanova",
     "TypliAI",
-
     "UncensoredChat",
-    # New free providers (no browser required)
     "Miklium",
-    # NOTE: Cloudflare, DeepInfraFree, Perchance are in llm4free.llm.UNFINISHED
-    # (browser-backed; Cloudflare Turnstile does not resolve headless).
+    "NoteGPT",
+
 ]

@@ -12,6 +12,7 @@ from llm4free.llm.Auth.together_ai import TogetherAI
 from llm4free.llm.Auth.two_ai import TwoAI
 from llm4free.llm.Auth.upstage import Upstage
 from llm4free.llm.Auth.zenmux import Zenmux
+from llm4free.llm.Auth.uncensoredchat import UncensoredChat
 
 __all__ = [
     "DeepAI",
@@ -26,4 +27,5 @@ __all__ = [
     "TextPollinations",
     "Upstage",
     "Zenmux",
+    "UncensoredChat"
 ]
