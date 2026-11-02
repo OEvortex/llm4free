@@ -72,6 +72,7 @@ from llm4free.llm.ollama_swarm import OllamaSwarm
 from llm4free.llm.pi import PiAI
 from llm4free.llm.toolbaz import Toolbaz
 from llm4free.llm.typliai import TypliAI
+from llm4free.llm.venice import Venice
 from llm4free.llm.wisecat import WiseCat
 
 # List of all exported names
@@ -136,6 +137,7 @@ __all__ = [
     "Sambanova",
     "TypliAI",
     "UncensoredChat",
+    "Venice",
     "Miklium",
     "NoteGPT",
 
