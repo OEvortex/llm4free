@@ -74,6 +74,7 @@ from llm4free.llm.toolbaz import Toolbaz
 from llm4free.llm.typliai import TypliAI
 from llm4free.llm.venice import Venice
 from llm4free.llm.wisecat import WiseCat
+from llm4free.llm.zai import Zai
 
 # List of all exported names
 __all__ = [
@@ -138,6 +139,7 @@ __all__ = [
     "TypliAI",
     "UncensoredChat",
     "Venice",
+    "Zai",
     "Miklium",
     "NoteGPT",
 

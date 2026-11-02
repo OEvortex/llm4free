@@ -65,6 +65,51 @@ _CONSOLE_POLL_JS = (
     "})()"
 )
 
+# Persistent browser session (reused across turns).
+_chatgpt_session = None
+_chatgpt_session_lock = threading.Lock()
+_chatgpt_initialized = False
+
+
+async def _ensure_session() -> CDPSession:
+    """Return a live persistent CDP session, creating one if needed."""
+    global _chatgpt_session, _chatgpt_initialized
+    if _chatgpt_session is not None and _chatgpt_initialized:
+        try:
+            await _chatgpt_session.get_title()
+            return _chatgpt_session
+        except Exception:
+            try:
+                await _chatgpt_session.close()
+            except Exception:
+                pass
+            _chatgpt_session = None
+            _chatgpt_initialized = False
+
+    with _chatgpt_session_lock:
+        if _chatgpt_session is not None and _chatgpt_initialized:
+            try:
+                await _chatgpt_session.get_title()
+                return _chatgpt_session
+            except Exception:
+                try:
+                    await _chatgpt_session.close()
+                except Exception:
+                    pass
+                _chatgpt_session = None
+                _chatgpt_initialized = False
+
+        session = CDPSession(headless=True)
+        await session.start()
+        await session.navigate(CHATGPT_BASE_URL)
+        await _wait_for_challenge(session)
+        await session.install_console_capture()
+        await session.evaluate_js("window.__cgpt_cursor = 0;")
+        await session.evaluate_js("window.__llm4free_console = [];")
+        _chatgpt_session = session
+        _chatgpt_initialized = True
+        return session
+
 
 class ChatGPTReversed:
     """Lightweight facade over the anonymous ChatGPT browser flow.
@@ -378,13 +423,10 @@ async def _run_browser(
         output: Queue receiving ``("delta", text)``, ``("error", message)``
             and ``("done", None)`` items.
     """
-    session = CDPSession(headless=True)
+    session = await _ensure_session()
     try:
-        await session.start()
-        await session.navigate(CHATGPT_BASE_URL)
-        await _wait_for_challenge(session)
-        await session.install_console_capture()
         await session.evaluate_js("window.__cgpt_cursor = 0;")
+        await session.evaluate_js("window.__llm4free_console = [];")
         await session.evaluate_js_stdin(_conversation_script(prompt))
 
         deadline = time.time() + timeout
@@ -432,37 +474,60 @@ async def _run_browser(
         output.put(("error", f"timed out after {timeout}s waiting for ChatGPT"))
     except Exception as exc:
         output.put(("error", str(exc)))
-    finally:
-        try:
-            await session.close()
-        except Exception:
-            pass
+        # Reset session on error so the next turn gets a fresh browser.
+        global _chatgpt_session, _chatgpt_initialized
+        if _chatgpt_session:
+            try:
+                await _chatgpt_session.close()
+            except Exception:
+                pass
+            _chatgpt_session = None
+            _chatgpt_initialized = False
 
 
 def _stream_conversation(prompt: str, timeout: int = DEFAULT_TIMEOUT) -> Generator[str, None, None]:
-    """Yield assistant text deltas produced by a browser conversation."""
-    output: "queue.Queue[Tuple[str, Optional[str]]]" = queue.Queue()
+    """Yield assistant text deltas produced by a browser conversation.
 
-    def worker() -> None:
+    Retries once with a fresh browser session if the first attempt fails,
+    since a dead CDP session should not permanently break the provider.
+    """
+    last_error = ""
+    for attempt in range(2):
+        output: "queue.Queue[Tuple[str, Optional[str]]]" = queue.Queue()
+
+        def worker() -> None:
+            try:
+                asyncio.run(_run_browser(prompt, timeout, output))
+            except Exception as exc:  # pragma: no cover - defensive
+                output.put(("error", str(exc)))
+
+        thread = threading.Thread(target=worker, daemon=True)
+        thread.start()
+
         try:
-            asyncio.run(_run_browser(prompt, timeout, output))
-        except Exception as exc:  # pragma: no cover - defensive
-            output.put(("error", str(exc)))
-
-    thread = threading.Thread(target=worker, daemon=True)
-    thread.start()
-
-    while True:
-        try:
-            kind, value = output.get(timeout=timeout + 60)
-        except queue.Empty as exc:
-            raise IOError("ChatGPT browser request timed out") from exc
-        if kind == "delta" and value:
-            yield value
-        elif kind == "error":
-            raise IOError(f"ChatGPT request failed: {value}")
-        elif kind == "done":
+            while True:
+                try:
+                    kind, value = output.get(timeout=timeout + 60)
+                except queue.Empty as exc:
+                    raise IOError("ChatGPT browser request timed out") from exc
+                if kind == "delta" and value:
+                    yield value
+                elif kind == "error":
+                    last_error = value or "unknown error"
+                    break  # exit inner loop to retry
+                elif kind == "done":
+                    return
+        except IOError:
+            last_error = "ChatGPT browser request timed out"
             break
+
+        # Reset the persistent session and retry once.
+        global _chatgpt_session, _chatgpt_initialized
+        _chatgpt_session = None
+        _chatgpt_initialized = False
+        if attempt == 0:
+            continue
+        raise IOError(f"ChatGPT request failed: {last_error}")
 
 
 class Completions(BaseCompletions):
